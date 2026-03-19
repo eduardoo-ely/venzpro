@@ -5,15 +5,16 @@ import { getFilesByOrg, createFile, deleteFile, getCompaniesByOrg } from '@/api/
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, ExternalLink } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Plus, Trash2, ExternalLink, FileText, Image, FolderOpen } from 'lucide-react';
+import { PageHeader } from '@/components/PageHeader';
+import { EmptyState } from '@/components/EmptyState';
+import { motion } from 'framer-motion';
 import type { CatalogFile, FileType } from '@/types';
-
-const FILE_TYPES: FileType[] = ['PDF', 'IMAGEM'];
 
 export default function CatalogosPage() {
   const { organization } = useAuth();
@@ -37,71 +38,67 @@ export default function CatalogosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Catálogos</h1>
-          <p className="text-muted-foreground">Arquivos e catálogos das empresas</p>
-        </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Novo Arquivo</Button></DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Novo Arquivo</DialogTitle></DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2"><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} required /></div>
-              <div className="space-y-2"><Label>URL *</Label><Input value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} required placeholder="https://..." /></div>
+      <PageHeader title="Catálogos" subtitle="Arquivos e documentos por empresa">
+        <Button onClick={openNew} className="gradient-primary border-0 text-white shadow-lg shadow-primary/25">
+          <Plus className="h-4 w-4 mr-2" />Novo Arquivo
+        </Button>
+      </PageHeader>
+
+      {files.length === 0 ? (
+        <EmptyState icon={FolderOpen} title="Nenhum catálogo cadastrado" description="Adicione PDFs, imagens e outros documentos de suas empresas parceiras." actionLabel="Novo Arquivo" onAction={openNew} />
+      ) : (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {files.map(f => (
+            <Card key={f.id} className="border-glow glow-card bg-card group">
+              <CardContent className="p-5 flex flex-col items-center text-center">
+                <div className={`h-16 w-16 rounded-2xl flex items-center justify-center mb-4 ${f.tipo === 'PDF' ? 'bg-destructive/10' : 'bg-status-info/10'}`}>
+                  {f.tipo === 'PDF'
+                    ? <FileText className="h-8 w-8 text-destructive" />
+                    : <Image className="h-8 w-8 text-status-info" />}
+                </div>
+                <p className="font-semibold text-sm mb-1 truncate w-full">{f.nome}</p>
+                <Badge variant="outline" className="text-[10px] mb-3">{f.empresaNome || f.empresaId}</Badge>
+                <div className="flex gap-2 mt-auto opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => window.open(f.url, '_blank')}>
+                    <ExternalLink className="h-3 w-3 mr-1" />Abrir
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild><Button size="sm" variant="ghost" className="h-7 text-xs text-destructive"><Trash2 className="h-3 w-3 mr-1" />Excluir</Button></AlertDialogTrigger>
+                    <AlertDialogContent className="border-glow bg-card"><AlertDialogHeader><AlertDialogTitle>Excluir arquivo?</AlertDialogTitle><AlertDialogDescription>Não pode ser desfeito.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteMut.mutate(f.id)} className="bg-destructive text-white">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </motion.div>
+      )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="border-glow bg-card">
+          <DialogHeader><DialogTitle>Novo Arquivo</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2"><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} required className="bg-muted border-border/50" /></div>
+            <div className="space-y-2"><Label>URL *</Label><Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} required className="bg-muted border-border/50" /></div>
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Tipo *</Label>
-                <Select value={form.tipo} onValueChange={v => setForm(p => ({ ...p, tipo: v as FileType }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{FILE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as FileType }))}>
+                  <SelectTrigger className="bg-muted border-border/50"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="PDF">PDF</SelectItem><SelectItem value="IMAGEM">Imagem</SelectItem></SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Empresa *</Label>
-                <Select value={form.empresaId} onValueChange={v => setForm(p => ({ ...p, empresaId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <Select value={form.empresaId} onValueChange={v => setForm(f => ({ ...f, empresaId: v }))}>
+                  <SelectTrigger className="bg-muted border-border/50"><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <Button type="submit" className="w-full">Criar</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="rounded-lg border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Empresa</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {files.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">Nenhum arquivo cadastrado</TableCell></TableRow>
-            ) : files.map(f => (
-              <TableRow key={f.id}>
-                <TableCell className="font-medium">{f.nome}</TableCell>
-                <TableCell><Badge variant="secondary">{f.tipo}</Badge></TableCell>
-                <TableCell>{f.empresaNome || f.empresaId}</TableCell>
-                <TableCell className="text-right space-x-1">
-                  <Button variant="ghost" size="icon" asChild><a href={f.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /></a></Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader><AlertDialogTitle>Excluir arquivo?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
-                      <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteMut.mutate(f.id)}>Excluir</AlertDialogAction></AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </div>
+            <Button type="submit" className="w-full gradient-primary border-0 text-white">Criar Arquivo</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
