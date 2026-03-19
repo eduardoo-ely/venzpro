@@ -1,164 +1,242 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getEventsByOrg, createEvent, updateEvent, deleteEvent, getCustomersByOrg, getCompaniesByOrg } from '@/api/api';
+import { getEventsByOrg, getCustomersByOrg, getCompaniesByOrg, createEvent, updateEvent, deleteEvent } from '@/api/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
-import type { Event as EventModel, EventType, EventStatus } from '@/types';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Plus, Pencil, Trash2, Calendar, List, MapPin, Users2, RefreshCw } from 'lucide-react';
+import { PageHeader } from '@/components/PageHeader';
+import { EmptyState } from '@/components/EmptyState';
+import { motion } from 'framer-motion';
+import type { Event as AppEvent, EventType, EventStatus } from '@/types';
 
-const TIPO_OPTIONS: EventType[] = ['VISITA', 'REUNIAO', 'FOLLOW_UP'];
-const STATUS_OPTIONS: EventStatus[] = ['AGENDADO', 'CONCLUIDO', 'CANCELADO'];
+const typeConfig: Record<EventType, { label: string; color: string }> = {
+  VISITA: { label: 'Visita', color: 'hsl(239 84% 67%)' },
+  REUNIAO: { label: 'Reunião', color: 'hsl(188 95% 43%)' },
+  FOLLOW_UP: { label: 'Follow-up', color: 'hsl(38 92% 50%)' },
+};
+
+const statusConfig: Record<EventStatus, { label: string; class: string }> = {
+  AGENDADO: { label: 'Agendado', class: 'status-agendado' },
+  CONCLUIDO: { label: 'Concluído', class: 'status-concluido' },
+  CANCELADO: { label: 'Cancelado', class: 'status-cancelado' },
+};
+
+function groupByDate(events: AppEvent[]) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+  const endOfWeek = new Date(today); endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+  const groups: { label: string; events: AppEvent[] }[] = [
+    { label: 'Hoje', events: [] },
+    { label: 'Amanhã', events: [] },
+    { label: 'Esta Semana', events: [] },
+    { label: 'Futuro', events: [] },
+  ];
+
+  events.sort((a, b) => new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime()).forEach(ev => {
+    const d = new Date(ev.dataInicio); d.setHours(0, 0, 0, 0);
+    if (d.getTime() === today.getTime()) groups[0].events.push(ev);
+    else if (d.getTime() === tomorrow.getTime()) groups[1].events.push(ev);
+    else if (d < endOfWeek) groups[2].events.push(ev);
+    else groups[3].events.push(ev);
+  });
+
+  return groups.filter(g => g.events.length > 0);
+}
 
 export default function AgendaPage() {
   const { organization } = useAuth();
   const orgId = organization?.id || '';
   const qc = useQueryClient();
-  const [tipoFilter, setTipoFilter] = useState<string>('TODOS');
-  const [statusFilter, setStatusFilter] = useState<string>('TODOS');
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<EventModel | null>(null);
+  const [editing, setEditing] = useState<AppEvent | null>(null);
+  const [viewMode, setViewMode] = useState<'timeline' | 'calendar'>('timeline');
   const [form, setForm] = useState({ titulo: '', tipo: 'VISITA' as EventType, clienteId: '', empresaId: '', dataInicio: '', dataFim: '', descricao: '', status: 'AGENDADO' as EventStatus });
 
   const { data: events = [] } = useQuery({ queryKey: ['events', orgId], queryFn: () => getEventsByOrg(orgId), enabled: !!orgId });
   const { data: customers = [] } = useQuery({ queryKey: ['customers', orgId], queryFn: () => getCustomersByOrg(orgId), enabled: !!orgId });
   const { data: companies = [] } = useQuery({ queryKey: ['companies', orgId], queryFn: () => getCompaniesByOrg(orgId), enabled: !!orgId });
 
-  const createMut = useMutation({ mutationFn: (d: Partial<EventModel>) => createEvent(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ['events'] }); setOpen(false); } });
-  const updateMut = useMutation({ mutationFn: ({ id, d }: { id: string; d: Partial<EventModel> }) => updateEvent(id, d), onSuccess: () => { qc.invalidateQueries({ queryKey: ['events'] }); setOpen(false); } });
+  const createMut = useMutation({ mutationFn: (d: Partial<AppEvent>) => createEvent(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ['events'] }); setOpen(false); } });
+  const updateMut = useMutation({ mutationFn: ({ id, d }: { id: string; d: Partial<AppEvent> }) => updateEvent(id, d), onSuccess: () => { qc.invalidateQueries({ queryKey: ['events'] }); setOpen(false); } });
   const deleteMut = useMutation({ mutationFn: (id: string) => deleteEvent(id), onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }) });
 
-  const filtered = events
-    .filter(e => tipoFilter === 'TODOS' || e.tipo === tipoFilter)
-    .filter(e => statusFilter === 'TODOS' || e.status === statusFilter);
-
   const openNew = () => { setEditing(null); setForm({ titulo: '', tipo: 'VISITA', clienteId: '', empresaId: '', dataInicio: '', dataFim: '', descricao: '', status: 'AGENDADO' }); setOpen(true); };
-  const openEdit = (ev: EventModel) => { setEditing(ev); setForm({ titulo: ev.titulo, tipo: ev.tipo, clienteId: ev.clienteId || '', empresaId: ev.empresaId || '', dataInicio: ev.dataInicio, dataFim: ev.dataFim || '', descricao: ev.descricao || '', status: ev.status }); setOpen(true); };
+  const openEdit = (ev: AppEvent) => { setEditing(ev); setForm({ titulo: ev.titulo, tipo: ev.tipo, clienteId: ev.clienteId || '', empresaId: ev.empresaId || '', dataInicio: ev.dataInicio, dataFim: ev.dataFim || '', descricao: ev.descricao || '', status: ev.status }); setOpen(true); };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const d = { ...form, organizationId: orgId, clienteId: form.clienteId || undefined, empresaId: form.empresaId || undefined, dataFim: form.dataFim || undefined };
-    if (editing) updateMut.mutate({ id: editing.id, d });
-    else createMut.mutate(d);
+    const payload = { ...form, organizationId: orgId };
+    if (editing) updateMut.mutate({ id: editing.id, d: payload });
+    else createMut.mutate(payload);
   };
 
-  const statusClass = (s: string) => s === 'AGENDADO' ? 'status-agendado' : s === 'CONCLUIDO' ? 'status-concluido' : 'status-cancelado';
+  const groups = groupByDate(events);
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const monthName = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+  const eventsByDay: Record<number, AppEvent[]> = {};
+  events.forEach(ev => {
+    const d = new Date(ev.dataInicio);
+    if (d.getMonth() === month && d.getFullYear() === year) {
+      const day = d.getDate();
+      if (!eventsByDay[day]) eventsByDay[day] = [];
+      eventsByDay[day].push(ev);
+    }
+  });
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Agenda</h1>
-          <p className="text-muted-foreground">Gerencie visitas, reuniões e follow-ups</p>
+      <PageHeader title="Agenda" subtitle="Gerencie seus compromissos e visitas">
+        <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+          <Button variant={viewMode === 'timeline' ? 'default' : 'ghost'} size="icon" className={`h-8 w-8 ${viewMode === 'timeline' ? 'gradient-primary border-0' : ''}`} onClick={() => setViewMode('timeline')}>
+            <List className="h-4 w-4" />
+          </Button>
+          <Button variant={viewMode === 'calendar' ? 'default' : 'ghost'} size="icon" className={`h-8 w-8 ${viewMode === 'calendar' ? 'gradient-primary border-0' : ''}`} onClick={() => setViewMode('calendar')}>
+            <Calendar className="h-4 w-4" />
+          </Button>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Novo Evento</Button></DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>{editing ? 'Editar Evento' : 'Novo Evento'}</DialogTitle></DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2"><Label>Título *</Label><Input value={form.titulo} onChange={e => setForm(p => ({ ...p, titulo: e.target.value }))} required /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Tipo *</Label>
-                  <Select value={form.tipo} onValueChange={v => setForm(p => ({ ...p, tipo: v as EventType }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{TIPO_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Status *</Label>
-                  <Select value={form.status} onValueChange={v => setForm(p => ({ ...p, status: v as EventStatus }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
+        <Button onClick={openNew} className="gradient-primary border-0 text-white shadow-lg shadow-primary/25">
+          <Plus className="h-4 w-4 mr-2" />Novo Evento
+        </Button>
+      </PageHeader>
+
+      {events.length === 0 ? (
+        <EmptyState icon={Calendar} title="Nenhum evento agendado" description="Agende visitas, reuniões e follow-ups para manter o controle." actionLabel="Novo Evento" onAction={openNew} />
+      ) : viewMode === 'timeline' ? (
+        <div className="space-y-6">
+          {groups.map((group, gi) => (
+            <div key={gi}>
+              <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wider">{group.label}</h3>
+              <div className="space-y-2">
+                {group.events.map(ev => {
+                  const tc = typeConfig[ev.tipo];
+                  const sc = statusConfig[ev.status];
+                  return (
+                    <motion.div key={ev.id} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}>
+                      <Card className="border-glow glow-card bg-card group" onClick={() => openEdit(ev)}>
+                        <CardContent className="p-4 flex items-center gap-4 cursor-pointer">
+                          <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${tc.color.replace(')', ' / 0.15)')}` }}>
+                            {ev.tipo === 'VISITA' ? <MapPin className="h-4 w-4" style={{ color: tc.color }} /> :
+                             ev.tipo === 'REUNIAO' ? <Users2 className="h-4 w-4" style={{ color: tc.color }} /> :
+                             <RefreshCw className="h-4 w-4" style={{ color: tc.color }} />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{ev.titulo}</span>
+                              <Badge variant="outline" className="text-[10px]" style={{ color: tc.color, borderColor: `${tc.color.replace(')', ' / 0.3)')}` }}>{tc.label}</Badge>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-xs text-muted-foreground">{new Date(ev.dataInicio).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                              {ev.clienteNome && <span className="text-xs text-muted-foreground">• {ev.clienteNome}</span>}
+                            </div>
+                          </div>
+                          <Badge variant="outline" className={`${sc.class} text-[10px] font-semibold`}>{sc.label}</Badge>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={e => { e.stopPropagation(); openEdit(ev); }}><Pencil className="h-3.5 w-3.5" /></Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={e => e.stopPropagation()}><Trash2 className="h-3.5 w-3.5" /></Button></AlertDialogTrigger>
+                              <AlertDialogContent className="border-glow bg-card"><AlertDialogHeader><AlertDialogTitle>Excluir evento?</AlertDialogTitle><AlertDialogDescription>Não pode ser desfeito.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteMut.mutate(ev.id)} className="bg-destructive text-white">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Card className="border-glow bg-card">
+          <CardContent className="p-5">
+            <h3 className="text-lg font-semibold mb-4 capitalize">{monthName}</h3>
+            <div className="grid grid-cols-7 gap-1">
+              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
+                <div key={d} className="text-[10px] text-muted-foreground text-center font-medium py-2">{d}</div>
+              ))}
+              {Array.from({ length: firstDay }).map((_, i) => <div key={`empty-${i}`} />)}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const day = i + 1;
+                const dayEvents = eventsByDay[day] || [];
+                const isToday = day === now.getDate();
+                return (
+                  <div key={day} className={`relative p-1.5 rounded-lg min-h-[60px] text-xs transition-colors hover:bg-muted/30 cursor-pointer ${isToday ? 'bg-primary/10 ring-1 ring-primary/30' : ''}`} onClick={openNew}>
+                    <span className={`${isToday ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{day}</span>
+                    <div className="mt-1 space-y-0.5">
+                      {dayEvents.slice(0, 2).map(ev => (
+                        <div key={ev.id} className="h-1.5 rounded-full" style={{ background: typeConfig[ev.tipo].color }} />
+                      ))}
+                      {dayEvents.length > 2 && <span className="text-[8px] text-muted-foreground">+{dayEvents.length - 2}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="border-glow bg-card">
+          <DialogHeader><DialogTitle>{editing ? 'Editar Evento' : 'Novo Evento'}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2"><Label>Título *</Label><Input value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} required className="bg-muted border-border/50" /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tipo *</Label>
+                <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as EventType }))}>
+                  <SelectTrigger className="bg-muted border-border/50"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="VISITA">Visita</SelectItem><SelectItem value="REUNIAO">Reunião</SelectItem><SelectItem value="FOLLOW_UP">Follow-up</SelectItem></SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
+                <Label>Status *</Label>
+                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as EventStatus }))}>
+                  <SelectTrigger className="bg-muted border-border/50"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="AGENDADO">Agendado</SelectItem><SelectItem value="CONCLUIDO">Concluído</SelectItem><SelectItem value="CANCELADO">Cancelado</SelectItem></SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Data Início *</Label><Input type="datetime-local" value={form.dataInicio} onChange={e => setForm(f => ({ ...f, dataInicio: e.target.value }))} required className="bg-muted border-border/50" /></div>
+              <div className="space-y-2"><Label>Data Fim</Label><Input type="datetime-local" value={form.dataFim} onChange={e => setForm(f => ({ ...f, dataFim: e.target.value }))} className="bg-muted border-border/50" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
                 <Label>Cliente</Label>
-                <Select value={form.clienteId} onValueChange={v => setForm(p => ({ ...p, clienteId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
+                <Select value={form.clienteId} onValueChange={v => setForm(f => ({ ...f, clienteId: v }))}>
+                  <SelectTrigger className="bg-muted border-border/50"><SelectValue placeholder="Opcional" /></SelectTrigger>
                   <SelectContent>{customers.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Empresa</Label>
-                <Select value={form.empresaId} onValueChange={v => setForm(p => ({ ...p, empresaId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
+                <Select value={form.empresaId} onValueChange={v => setForm(f => ({ ...f, empresaId: v }))}>
+                  <SelectTrigger className="bg-muted border-border/50"><SelectValue placeholder="Opcional" /></SelectTrigger>
                   <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Data Início *</Label><Input type="datetime-local" value={form.dataInicio} onChange={e => setForm(p => ({ ...p, dataInicio: e.target.value }))} required /></div>
-                <div className="space-y-2"><Label>Data Fim</Label><Input type="datetime-local" value={form.dataFim} onChange={e => setForm(p => ({ ...p, dataFim: e.target.value }))} /></div>
-              </div>
-              <div className="space-y-2"><Label>Descrição</Label><Textarea value={form.descricao} onChange={e => setForm(p => ({ ...p, descricao: e.target.value }))} /></div>
-              <Button type="submit" className="w-full">{editing ? 'Salvar' : 'Criar'}</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="flex gap-3 flex-wrap">
-        <Select value={tipoFilter} onValueChange={setTipoFilter}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="TODOS">Todos os tipos</SelectItem>
-            {TIPO_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="TODOS">Todos status</SelectItem>
-            {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="rounded-lg border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Título</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Data Início</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum evento encontrado</TableCell></TableRow>
-            ) : filtered.map(ev => (
-              <TableRow key={ev.id}>
-                <TableCell className="font-medium">{ev.titulo}</TableCell>
-                <TableCell><Badge variant="secondary">{ev.tipo}</Badge></TableCell>
-                <TableCell>{ev.clienteNome || ev.clienteId || '-'}</TableCell>
-                <TableCell className="text-sm">{new Date(ev.dataInicio).toLocaleString('pt-BR')}</TableCell>
-                <TableCell><Badge variant="outline" className={statusClass(ev.status)}>{ev.status}</Badge></TableCell>
-                <TableCell className="text-right space-x-1">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(ev)}><Pencil className="h-4 w-4" /></Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader><AlertDialogTitle>Excluir evento?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
-                      <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteMut.mutate(ev.id)}>Excluir</AlertDialogAction></AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </div>
+            <div className="space-y-2"><Label>Descrição</Label><Textarea value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} className="bg-muted border-border/50" rows={3} /></div>
+            <Button type="submit" className="w-full gradient-primary border-0 text-white">{editing ? 'Salvar' : 'Criar Evento'}</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
