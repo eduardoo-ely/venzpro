@@ -5,6 +5,7 @@ import com.venzpro.application.dto.response.OrderResponse;
 import com.venzpro.domain.entity.Order;
 import com.venzpro.domain.enums.OrderStatus;
 import com.venzpro.domain.repository.*;
+import com.venzpro.application.service.AuditService;
 import com.venzpro.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ public class OrderService {
     private final CompanyRepository companyRepository;
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
+    private final AuditService auditService;
 
     @Transactional
     public OrderResponse create(OrderRequest req, UUID userId, UUID organizationId) {
@@ -38,7 +40,10 @@ public class OrderService {
                 .customer(customer).company(company).user(user).organization(org)
                 .valorTotal(req.valorTotal()).status(req.status()).descricao(req.descricao())
                 .build();
-        return OrderResponse.from(orderRepository.save(order));
+        var savedOrder = orderRepository.save(order);
+        auditService.log(organizationId, userId, AuditService.CREATE_ORDER,
+                "Pedido", savedOrder.getId(), "Cliente: " + customer.getNome());
+        return OrderResponse.from(savedOrder);
     }
 
     @Transactional(readOnly = true)

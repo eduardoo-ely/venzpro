@@ -46,6 +46,9 @@ public class SecurityConfig {
                         // ── Rotas públicas ─────────────────────────────────
                         .requestMatchers("/api/auth/**").permitAll()
 
+                        // ── Health check (Docker) ───────────────────────────
+                        .requestMatchers("/actuator/health").permitAll()
+
                         // ── Organização: só ADMIN pode criar/editar/deletar ─
                         .requestMatchers(HttpMethod.GET, "/api/organizations/**").authenticated()
                         .requestMatchers("/api/organizations/**").hasRole("ADMIN")

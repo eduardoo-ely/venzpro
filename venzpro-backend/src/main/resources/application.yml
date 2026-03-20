@@ -1,36 +1,59 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/venzpro
-    username: postgres
-    password: postgres
+    url:      ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/venzpro}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
     hikari:
       maximum-pool-size: 10
       connection-timeout: 20000
+      # Aguarda banco subir no Docker antes de falhar
+      initialization-fail-timeout: 60000
+
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: false
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
+    open-in-view: false
+    # CRÍTICO: garante que o Hibernate cria as tabelas ANTES do data.sql rodar
+    defer-datasource-initialization: true
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+
   jackson:
     default-property-inclusion: non_null
     serialization:
       write-dates-as-timestamps: false
 
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:data.sql
+
 server:
   port: 8080
   error:
-    include-message: never   # nunca expõe stack traces
+    include-message: never
     include-stacktrace: never
 
 jwt:
-  # Gere uma chave segura em produção: openssl rand -base64 64
-  secret: "venzpro-super-secret-key-change-in-production-must-be-at-least-256-bits-long-for-hs256"
-  expiration: 86400000   # 24h em milissegundos
+  secret:     ${JWT_SECRET:venzpro-dev-secret-key-nao-usar-em-producao-256bits-minimo}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
 
 logging:
   level:
-    com.venzpro: DEBUG
-    org.springframework.security: WARN
+    com.venzpro:                          ${LOGGING_LEVEL_COM_VENZPRO:INFO}
+    org.springframework.security:        ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY:WARN}
+    org.hibernate.SQL:                   WARN

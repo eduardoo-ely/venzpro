@@ -2,6 +2,7 @@ import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
+import { SupportButton } from '@/components/SupportButton';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export function AppLayout() {
@@ -33,6 +34,9 @@ export function AppLayout() {
           </main>
         </div>
       </div>
+
+      {/* Botão de suporte flutuante — visível em todas as páginas autenticadas */}
+      <SupportButton />
     </SidebarProvider>
   );
 }

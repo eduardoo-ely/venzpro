@@ -11,6 +11,7 @@ import com.venzpro.domain.repository.OrganizationRepository;
 import com.venzpro.domain.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.venzpro.application.service.AuditService;
 import com.venzpro.exception.BusinessException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,6 +35,7 @@ public class AuthService {
     private final OrganizationRepository organizationRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final AuditService auditService;
 
     // ----------------------------------------------------------------
     // LOGIN
@@ -60,6 +62,7 @@ public class AuthService {
         // Verifica senha com BCrypt — NUNCA compare texto puro
         if (!passwordEncoder.matches(request.senha(), user.getSenha())) {
             log.warn("Tentativa de login com senha inválida para: {}", request.email());
+            auditService.logError(null, null, AuditService.LOGIN_FAILED, "Email: " + request.email());
             throw new BadCredentialsException("Credenciais inválidas");
         }
 
@@ -76,6 +79,7 @@ public class AuthService {
         );
 
         log.info("Login bem-sucedido para usuário: {}", user.getId());
+        auditService.log(user.getOrganization().getId(), user.getId(), AuditService.LOGIN, "User", user.getId(), "Login: " + user.getEmail());
         return buildAuthResponse(token, user, org);
     }
 
@@ -123,6 +127,7 @@ public class AuthService {
         );
 
         log.info("Novo usuário registrado: {} na organização: {}", user.getId(), org.getId());
+        auditService.log(org.getId(), user.getId(), AuditService.REGISTER, "User", user.getId(), "Registro: " + user.getEmail());
         return buildAuthResponse(token, user, org);
     }
 

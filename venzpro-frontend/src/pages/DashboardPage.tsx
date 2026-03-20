@@ -13,6 +13,7 @@ import { AnimatedCounter } from '@/components/AnimatedCounter';
 import { SparkLine } from '@/components/SparkLine';
 import { AvatarInitials } from '@/components/AvatarInitials';
 import { PageHeader } from '@/components/PageHeader';
+import { OnboardingBanner } from '@/components/OnboardingBanner';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 
 const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -38,7 +39,6 @@ export default function DashboardPage() {
 
   const isLoading = lC || lO || lE;
 
-  // Gráfico de pedidos por mês (últimos 6 meses) — calculado dos dados reais
   const monthlyData = useMemo(() => {
     const now    = new Date();
     const months = Array.from({ length: 6 }, (_, i) => {
@@ -54,7 +54,6 @@ export default function DashboardPage() {
     return months;
   }, [orders]);
 
-  // Sparkline — contagem dos últimos 10 dias
   const customerSpark = useMemo(() => {
     const days = Array.from({ length: 10 }, (_, i) => {
       const d = new Date(); d.setDate(d.getDate() - 9 + i); d.setHours(0,0,0,0);
@@ -72,10 +71,10 @@ export default function DashboardPage() {
   }, [orders]);
 
   const stats = [
-    { title: 'Total de Clientes', value: customers.length, icon: Users,       change: null, spark: customerSpark, color: 'hsl(239 84% 67%)' },
-    { title: 'Total de Pedidos',  value: orders.length,    icon: Package,      change: null, spark: orderSpark,    color: 'hsl(258 90% 66%)' },
-    { title: 'Em Aberto',  value: orders.filter(o => o.status === 'ORCAMENTO').length, icon: FileText,     change: null, spark: [], color: 'hsl(38 92% 50%)' },
-    { title: 'Fechados',   value: orders.filter(o => o.status === 'FECHADO').length,   icon: CheckCircle,  change: null, spark: [], color: 'hsl(160 84% 39%)' },
+    { title: 'Clientes',      value: customers.length,                                         icon: Users,       spark: customerSpark, color: 'hsl(239 84% 67%)' },
+    { title: 'Pedidos',       value: orders.length,                                            icon: Package,     spark: orderSpark,    color: 'hsl(258 90% 66%)' },
+    { title: 'Em Aberto',     value: orders.filter(o => o.status === 'ORCAMENTO').length,      icon: FileText,    spark: [],            color: 'hsl(38 92% 50%)' },
+    { title: 'Fechados',      value: orders.filter(o => o.status === 'FECHADO').length,        icon: CheckCircle, spark: [],            color: 'hsl(160 84% 39%)' },
   ];
 
   const lastOrders      = [...orders].sort((a,b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()).slice(0, 5);
@@ -84,9 +83,12 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 max-w-[1400px]">
       <PageHeader
-        title={`Bom dia, ${user?.nome?.split(' ')[0] ?? ''}! 👋`}
-        subtitle="Visão geral da sua operação comercial"
+        title={`Olá, ${user?.nome?.split(' ')[0] ?? 'bem-vindo'}! 👋`}
+        subtitle="Aqui está o resumo da sua operação comercial"
       />
+
+      {/* Banner de onboarding — só aparece para novos usuários */}
+      <OnboardingBanner />
 
       {/* KPI Cards */}
       {isLoading ? (
@@ -159,12 +161,12 @@ export default function DashboardPage() {
           <Card className="border-glow bg-card h-full">
             <CardContent className="p-5">
               <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-primary" /> Próximos Eventos
+                <Calendar className="h-4 w-4 text-primary" /> Próximos Compromissos
               </h3>
               {isLoading
                 ? <div className="space-y-3">{Array.from({ length: 3 }).map((_,i) => <div key={i} className="flex gap-3"><Skeleton className="h-8 w-8 rounded-lg" /><div className="space-y-1 flex-1"><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div></div>)}</div>
                 : upcomingEvents.length === 0
-                  ? <p className="text-muted-foreground text-xs text-center py-8">Nenhum evento agendado</p>
+                  ? <p className="text-muted-foreground text-xs text-center py-8">Nenhum compromisso agendado</p>
                   : (
                     <div className="space-y-3">
                       {upcomingEvents.map(ev => (
@@ -193,7 +195,13 @@ export default function DashboardPage() {
             {isLoading
               ? <div className="space-y-3">{Array.from({ length: 4 }).map((_,i) => <div key={i} className="flex items-center gap-4"><Skeleton className="h-8 w-8 rounded-full" /><Skeleton className="h-3 flex-1" /><Skeleton className="h-3 w-20" /><Skeleton className="h-6 w-16 rounded-full" /></div>)}</div>
               : lastOrders.length === 0
-                ? <p className="text-muted-foreground text-xs text-center py-8">Nenhum pedido cadastrado ainda.</p>
+                ? (
+                  <div className="text-center py-8">
+                    <Package className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Nenhum pedido ainda.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Cadastre um cliente e crie seu primeiro pedido.</p>
+                  </div>
+                )
                 : (
                   <Table>
                     <TableHeader>

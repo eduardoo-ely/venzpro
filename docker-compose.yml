@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+
+  # ── Banco de dados ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: venzpro-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       venzpro
+      POSTGRES_USER:     venzpro
+      POSTGRES_PASSWORD: venzpro123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data   # dados persistem entre restarts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U venzpro -d venzpro"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Backend Spring Boot ─────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./venzpro-backend
+      dockerfile: Dockerfile
+    container_name: venzpro-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Banco — usa o nome do serviço "postgres", não localhost
+      SPRING_DATASOURCE_URL:      jdbc:postgresql://postgres:5432/venzpro
+      SPRING_DATASOURCE_USERNAME: venzpro
+      SPRING_DATASOURCE_PASSWORD: venzpro123
+
+      # JPA
+      SPRING_JPA_HIBERNATE_DDL_AUTO:    update
+      SPRING_JPA_SHOW_SQL:              false
+
+      # JWT
+      JWT_SECRET:     venzpro-beta-secret-key-troque-em-producao-256bits-minimo
+      JWT_EXPIRATION: 86400000
+
+      # Logs mais limpos para beta tester
+      LOGGING_LEVEL_COM_VENZPRO:                 INFO
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: WARN
+
+    depends_on:
+      postgres:
+        condition: service_healthy   # aguarda o banco estar pronto antes de iniciar
+
+volumes:
+  postgres_data:   # volume nomeado — dados sobrevivem a docker-compose down

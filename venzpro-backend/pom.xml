@@ -86,6 +86,12 @@
         </dependency>
 
         <!-- ==================== TESTES ==================== -->
+        <!-- Actuator: habilita /actuator/health para o Docker healthcheck -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- AOP para TenantIsolationAspect -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
