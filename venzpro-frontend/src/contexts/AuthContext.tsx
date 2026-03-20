@@ -1,73 +1,79 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User, Organization, OrganizationType, AuthState } from '@/types';
+import { authApi, type RegisterPayload } from '@/api/endpoints';
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-const STORAGE_KEY = 'hub_comercial_auth';
+const TOKEN_KEY = 'venzpro_token';
+const AUTH_KEY  = 'venzpro_auth';
 
-interface StoredAuth {
-  user: User;
-  organization: Organization;
-}
+interface Stored { user: User; organization: Organization }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [organization, setOrganization] = useState<Organization | null>(null);
+  const [user, setUser]                   = useState<User | null>(null);
+  const [organization, setOrganization]   = useState<Organization | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
+    const token  = localStorage.getItem(TOKEN_KEY);
+    const stored = localStorage.getItem(AUTH_KEY);
+    if (token && stored) {
       try {
-        const parsed: StoredAuth = JSON.parse(stored);
+        const parsed: Stored = JSON.parse(stored);
         setUser(parsed.user);
         setOrganization(parsed.organization);
       } catch {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(AUTH_KEY);
       }
     }
   }, []);
 
-  const login = useCallback(async (email: string, _senha: string) => {
-    // Mock login
-    const mockUser: User = {
-      id: 'user-1',
-      nome: email.split('@')[0],
-      email,
-      role: 'ADMIN',
-      organizationId: 'org-1',
+  const persist = (token: string, u: User, o: Organization) => {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(AUTH_KEY, JSON.stringify({ user: u, organization: o }));
+    setUser(u);
+    setOrganization(o);
+  };
+
+  const login = useCallback(async (email: string, senha: string) => {
+    const res = await authApi.login({ email, senha });
+    const u: User = {
+      id: res.user.id, nome: res.user.nome, email: res.user.email,
+      role: res.user.role as User['role'], organizationId: res.organization.id,
     };
-    const mockOrg: Organization = {
-      id: 'org-1',
-      nome: 'Minha Organização',
-      tipo: 'REPRESENTANTE',
+    const o: Organization = {
+      id: res.organization.id, nome: res.organization.nome,
+      tipo: res.organization.tipo as OrganizationType,
     };
-    setUser(mockUser);
-    setOrganization(mockOrg);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ user: mockUser, organization: mockOrg }));
+    persist(res.token, u, o);
   }, []);
 
-  const register = useCallback(async (nome: string, email: string, _senha: string, tipo: OrganizationType) => {
-    const mockUser: User = {
-      id: `user-${Date.now()}`,
-      nome,
-      email,
-      role: 'ADMIN',
-      organizationId: `org-${Date.now()}`,
+  const register = useCallback(async (
+    nome: string, email: string, senha: string,
+    tipo: OrganizationType, nomeOrganizacao?: string,
+  ) => {
+    const payload: RegisterPayload = {
+      nome, email, senha,
+      nomeOrganizacao: nomeOrganizacao ?? `Organização de ${nome}`,
+      tipoOrganizacao: tipo,
     };
-    const mockOrg: Organization = {
-      id: mockUser.organizationId,
-      nome: `Org de ${nome}`,
-      tipo,
+    const res = await authApi.register(payload);
+    const u: User = {
+      id: res.user.id, nome: res.user.nome, email: res.user.email,
+      role: res.user.role as User['role'], organizationId: res.organization.id,
     };
-    setUser(mockUser);
-    setOrganization(mockOrg);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ user: mockUser, organization: mockOrg }));
+    const o: Organization = {
+      id: res.organization.id, nome: res.organization.nome,
+      tipo: res.organization.tipo as OrganizationType,
+    };
+    persist(res.token, u, o);
   }, []);
 
   const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(AUTH_KEY);
     setUser(null);
     setOrganization(null);
-    localStorage.removeItem(STORAGE_KEY);
   }, []);
 
   return (

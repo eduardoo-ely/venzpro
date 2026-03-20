@@ -3,14 +3,34 @@ spring:
     url: jdbc:postgresql://localhost:5432/venzpro
     username: postgres
     password: postgres
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 20000
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
 
 server:
   port: 8080
+  error:
+    include-message: never   # nunca expõe stack traces
+    include-stacktrace: never
+
+jwt:
+  # Gere uma chave segura em produção: openssl rand -base64 64
+  secret: "venzpro-super-secret-key-change-in-production-must-be-at-least-256-bits-long-for-hs256"
+  expiration: 86400000   # 24h em milissegundos
+
+logging:
+  level:
+    com.venzpro: DEBUG
+    org.springframework.security: WARN

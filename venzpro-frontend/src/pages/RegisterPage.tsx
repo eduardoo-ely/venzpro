@@ -6,25 +6,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Zap } from 'lucide-react';
+import { Zap, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { getErrorMessage } from '@/api/api';
 import type { OrganizationType } from '@/types';
 
 export default function RegisterPage() {
-  const [nome, setNome] = useState('');
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
-  const [tipo, setTipo] = useState<OrganizationType>('REPRESENTANTE');
-  const [loading, setLoading] = useState(false);
+  const [nome,             setNome]             = useState('');
+  const [email,            setEmail]            = useState('');
+  const [senha,            setSenha]            = useState('');
+  const [nomeOrganizacao,  setNomeOrganizacao]  = useState('');
+  const [tipo,             setTipo]             = useState<OrganizationType>('REPRESENTANTE');
+  const [error,            setError]            = useState('');
+  const [loading,          setLoading]          = useState(false);
   const { register } = useAuth();
-  const navigate = useNavigate();
+  const navigate     = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    if (senha.length < 8) { setError('A senha deve ter no mínimo 8 caracteres.'); return; }
     setLoading(true);
     try {
-      await register(nome, email, senha, tipo);
+      await register(nome, email, senha, tipo, nomeOrganizacao || undefined);
       navigate('/');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao criar conta. Tente novamente.'));
     } finally {
       setLoading(false);
     }
@@ -50,21 +57,35 @@ export default function RegisterPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {error}
+                </div>
+              )}
               <div className="space-y-2">
-                <Label htmlFor="nome">Nome</Label>
-                <Input id="nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Seu nome completo" required className="bg-muted border-border/50" />
+                <Label htmlFor="nome">Nome completo</Label>
+                <Input id="nome" value={nome} onChange={e => setNome(e.target.value)}
+                  placeholder="Seu nome" required className="bg-muted border-border/50" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" required className="bg-muted border-border/50" />
+                <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="seu@email.com" required className="bg-muted border-border/50" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="senha">Senha</Label>
-                <Input id="senha" type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••••" required className="bg-muted border-border/50" />
+                <Label htmlFor="senha">Senha <span className="text-muted-foreground text-xs">(mín. 8 caracteres)</span></Label>
+                <Input id="senha" type="password" value={senha} onChange={e => setSenha(e.target.value)}
+                  placeholder="••••••••" required minLength={8} className="bg-muted border-border/50" />
               </div>
               <div className="space-y-2">
-                <Label>Tipo de Organização</Label>
-                <Select value={tipo} onValueChange={(v) => setTipo(v as OrganizationType)}>
+                <Label htmlFor="org">Nome da organização <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+                <Input id="org" value={nomeOrganizacao} onChange={e => setNomeOrganizacao(e.target.value)}
+                  placeholder="Minha Empresa Ltda." className="bg-muted border-border/50" />
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo de organização</Label>
+                <Select value={tipo} onValueChange={v => setTipo(v as OrganizationType)}>
                   <SelectTrigger className="bg-muted border-border/50"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="REPRESENTANTE">Representante Comercial</SelectItem>
@@ -73,7 +94,7 @@ export default function RegisterPage() {
                 </Select>
               </div>
               <Button type="submit" className="w-full gradient-primary border-0 text-white shadow-lg shadow-primary/25" disabled={loading}>
-                {loading ? 'Criando...' : 'Criar Conta'}
+                {loading ? 'Criando conta...' : 'Criar Conta'}
               </Button>
             </form>
             <p className="mt-4 text-center text-sm text-muted-foreground">

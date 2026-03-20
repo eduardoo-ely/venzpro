@@ -5,22 +5,27 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Zap } from 'lucide-react';
+import { Zap, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { getErrorMessage } from '@/api/api';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
+  const [email,  setEmail]  = useState('');
+  const [senha,  setSenha]  = useState('');
+  const [error,  setError]  = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  const { login }   = useAuth();
+  const navigate    = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     setLoading(true);
     try {
       await login(email, senha);
       navigate('/');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Email ou senha inválidos.'));
     } finally {
       setLoading(false);
     }
@@ -28,7 +33,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
-      {/* Background effects */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,hsl(239_84%_67%/0.08),transparent_50%)]" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,hsl(258_90%_66%/0.06),transparent_50%)]" />
 
@@ -41,19 +45,27 @@ export default function LoginPage() {
               </div>
             </div>
             <div>
-              <CardTitle className="text-2xl font-bold letter-tight">Hub Comercial</CardTitle>
+              <CardTitle className="text-2xl font-bold letter-tight">VenzPro</CardTitle>
               <CardDescription>Entre com suas credenciais para acessar</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {error}
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" required className="bg-muted border-border/50" />
+                <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="seu@email.com" required className="bg-muted border-border/50" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="senha">Senha</Label>
-                <Input id="senha" type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••••" required className="bg-muted border-border/50" />
+                <Input id="senha" type="password" value={senha} onChange={e => setSenha(e.target.value)}
+                  placeholder="••••••••" required className="bg-muted border-border/50" />
               </div>
               <Button type="submit" className="w-full gradient-primary border-0 text-white shadow-lg shadow-primary/25" disabled={loading}>
                 {loading ? 'Entrando...' : 'Entrar'}
