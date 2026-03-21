@@ -25,10 +25,8 @@ import java.util.List;
  *  3. Registrar o principal no SecurityContext do Spring
  *  4. Registrar o organizationId no TenantContext (ThreadLocal)
  *  5. Limpar o TenantContext no finally (evita memory leak)
- *
- * O TenantContext permite que qualquer Service/Repository acesse
- * o organizationId sem precisar recebê-lo como parâmetro.
  */
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -40,7 +38,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
-
         final String token = extractToken(request);
 
         try {
@@ -65,9 +62,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
 
         } finally {
-            // 3. Limpeza obrigatória — evita vazamento entre requests no pool de threads
             TenantContext.clear();
-            SecurityContextHolder.clearContext();
         }
     }
 

@@ -31,6 +31,9 @@ spring:
       mode: always
       schema-locations: classpath:schema.sql
       data-locations: classpath:data.sql
+      # CRÍTICO: separador customizado para suportar funções PL/pgSQL
+      # O padrão (;) quebra dentro de blocos $$ ... $$
+      separator: "@@"
 
 server:
   port: 8080

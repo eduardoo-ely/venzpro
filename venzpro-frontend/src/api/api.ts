@@ -1,9 +1,6 @@
 import axios, { type AxiosError } from 'axios';
 
 // ── Instância ─────────────────────────────────────────────────────────────────
-// Em produção (Docker): VITE_API_URL = /api  → nginx faz proxy para o backend
-// Em desenvolvimento:   VITE_API_URL = http://localhost:8080/api
-
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
   headers: { 'Content-Type': 'application/json' },
@@ -18,15 +15,22 @@ api.interceptors.request.use((config) => {
 });
 
 // ── Logout automático no 401 ──────────────────────────────────────────────────
+// IMPORTANTE: só redireciona se NÃO estiver nas rotas públicas (/login, /register)
+// Caso contrário o erro de "senha errada" nunca aparece na tela de login.
+
+const PUBLIC_PATHS = ['/login', '/register'];
 
 api.interceptors.response.use(
     (r) => r,
     (error: AxiosError) => {
-      if (error.response?.status === 401) {
+      const isPublicPage = PUBLIC_PATHS.some(p => window.location.pathname.startsWith(p));
+
+      if (error.response?.status === 401 && !isPublicPage) {
         localStorage.removeItem('venzpro_token');
         localStorage.removeItem('venzpro_auth');
         window.location.replace('/login');
       }
+
       return Promise.reject(error);
     }
 );
