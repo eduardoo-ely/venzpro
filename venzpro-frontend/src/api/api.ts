@@ -1,9 +1,11 @@
 import axios, { type AxiosError } from 'axios';
 
 // ── Instância ─────────────────────────────────────────────────────────────────
+// Em produção (Docker): VITE_API_URL = /api  → nginx faz proxy para o backend
+// Em desenvolvimento:   VITE_API_URL = http://localhost:8080/api
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api',
+  baseURL: import.meta.env.VITE_API_URL ?? '/api',
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -18,28 +20,25 @@ api.interceptors.request.use((config) => {
 // ── Logout automático no 401 ──────────────────────────────────────────────────
 
 api.interceptors.response.use(
-  (r) => r,
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('venzpro_token');
-      localStorage.removeItem('venzpro_auth');
-      window.location.replace('/login');
+    (r) => r,
+    (error: AxiosError) => {
+      if (error.response?.status === 401) {
+        localStorage.removeItem('venzpro_token');
+        localStorage.removeItem('venzpro_auth');
+        window.location.replace('/login');
+      }
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
-  }
 );
 
 // ── Extrator de mensagem de erro ──────────────────────────────────────────────
-// Suporta o novo formato { mensagem, campos } E o antigo RFC 7807 { detail, title }
 
 export function getErrorMessage(error: unknown, fallback = 'Ocorreu um erro inesperado.'): string {
   if (!axios.isAxiosError(error)) return fallback;
   const data = error.response?.data as Record<string, unknown> | undefined;
   if (!data) return error.message || fallback;
 
-  // Novo formato: { mensagem: "...", campos: {...} }
   if (typeof data.mensagem === 'string') {
-    // Se há erros de campo, lista os primeiros 3
     if (data.campos && typeof data.campos === 'object') {
       const msgs = Object.values(data.campos as Record<string, string>).slice(0, 3);
       if (msgs.length) return msgs.join(' • ');
@@ -47,7 +46,6 @@ export function getErrorMessage(error: unknown, fallback = 'Ocorreu um erro ines
     return data.mensagem;
   }
 
-  // Formato RFC 7807 (legado)
   if (typeof data.detail  === 'string') return data.detail;
   if (typeof data.title   === 'string') return data.title;
   if (typeof data.error   === 'string') return data.error;
@@ -56,7 +54,6 @@ export function getErrorMessage(error: unknown, fallback = 'Ocorreu um erro ines
   return fallback;
 }
 
-/** Extrai erros por campo do formato { campos: { field: msg } } */
 export function getFieldErrors(error: unknown): Record<string, string> {
   if (!axios.isAxiosError(error)) return {};
   const data = error.response?.data as Record<string, unknown> | undefined;

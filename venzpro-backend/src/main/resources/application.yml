@@ -1,12 +1,11 @@
 spring:
   datasource:
-    url:      ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/venzpro}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/venzpro}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:postgres}
     hikari:
       maximum-pool-size: 10
       connection-timeout: 20000
-      # Aguarda banco subir no Docker antes de falhar
       initialization-fail-timeout: 60000
 
   jpa:
@@ -14,7 +13,6 @@ spring:
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
     show-sql: ${SPRING_JPA_SHOW_SQL:false}
     open-in-view: false
-    # CRÍTICO: garante que o Hibernate cria as tabelas ANTES do data.sql rodar
     defer-datasource-initialization: true
     properties:
       hibernate:
@@ -31,6 +29,7 @@ spring:
   sql:
     init:
       mode: always
+      schema-locations: classpath:schema.sql
       data-locations: classpath:data.sql
 
 server:
@@ -40,7 +39,7 @@ server:
     include-stacktrace: never
 
 jwt:
-  secret:     ${JWT_SECRET:venzpro-dev-secret-key-nao-usar-em-producao-256bits-minimo}
+  secret: ${JWT_SECRET:venzpro-dev-secret-key-nao-usar-em-producao-256bits-minimo}
   expiration: ${JWT_EXPIRATION:86400000}
 
 management:
@@ -54,6 +53,6 @@ management:
 
 logging:
   level:
-    com.venzpro:                          ${LOGGING_LEVEL_COM_VENZPRO:INFO}
-    org.springframework.security:        ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY:WARN}
-    org.hibernate.SQL:                   WARN
+    com.venzpro: ${LOGGING_LEVEL_COM_VENZPRO:INFO}
+    org.springframework.security: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY:WARN}
+    org.hibernate.SQL: WARN

@@ -11,10 +11,8 @@ services:
       POSTGRES_DB:       venzpro
       POSTGRES_USER:     venzpro
       POSTGRES_PASSWORD: venzpro123
-    ports:
-      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data   # dados persistem entre restarts
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U venzpro -d venzpro"]
       interval: 10s
@@ -29,29 +27,44 @@ services:
       dockerfile: Dockerfile
     container_name: venzpro-backend
     restart: unless-stopped
-    ports:
-      - "8080:8080"
     environment:
-      # Banco — usa o nome do serviço "postgres", não localhost
       SPRING_DATASOURCE_URL:      jdbc:postgresql://postgres:5432/venzpro
       SPRING_DATASOURCE_USERNAME: venzpro
       SPRING_DATASOURCE_PASSWORD: venzpro123
-
-      # JPA
       SPRING_JPA_HIBERNATE_DDL_AUTO:    update
       SPRING_JPA_SHOW_SQL:              false
-
-      # JWT
       JWT_SECRET:     venzpro-beta-secret-key-troque-em-producao-256bits-minimo
       JWT_EXPIRATION: 86400000
-
-      # Logs mais limpos para beta tester
       LOGGING_LEVEL_COM_VENZPRO:                 INFO
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: WARN
-
     depends_on:
       postgres:
-        condition: service_healthy   # aguarda o banco estar pronto antes de iniciar
+        condition: service_healthy
+    # Porta 8080 NÃO é exposta ao host — só acessível internamente pelo nginx
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ── Frontend React (nginx) ──────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./venzpro-frontend
+      dockerfile: Dockerfile
+      args:
+        # Com proxy nginx, a API fica no mesmo host — sem CORS
+        VITE_API_URL: /api
+    container_name: venzpro-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"   # Acesse em http://localhost:8080
+    depends_on:
+      backend:
+        condition: service_healthy
 
 volumes:
-  postgres_data:   # volume nomeado — dados sobrevivem a docker-compose down
+  postgres_data:

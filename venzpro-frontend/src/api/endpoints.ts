@@ -73,7 +73,7 @@ export const ordersApi = {
   get:          (id: string)                        => api.get<Order>(`/orders/${id}`).then(r => r.data),
   create:       (d: OrderPayload)                   => api.post<Order>('/orders', d).then(r => r.data),
   update:       (id: string, d: OrderPayload)       => api.put<Order>(`/orders/${id}`, d).then(r => r.data),
-  updateStatus: (id: string, status: OrderStatus)   => api.patch<Order>(`/orders/${id}/status`, null, { params: { status } }).then(r => r.data),
+  updateStatus: (id: string, status: OrderStatus) => api.patch<Order>(`/orders/${id}/status`, {}, { params: { status } }).then(r => r.data),
   remove:       (id: string)                        => api.delete(`/orders/${id}`).then(r => r.data),
 };
 

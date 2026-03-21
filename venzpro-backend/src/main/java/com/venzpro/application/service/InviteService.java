@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.UUID;
 
 /**
  * Serviço de convite de novos usuários para uma organização.

@@ -4,17 +4,17 @@ Sistema de gestão comercial para representantes e equipes de vendas.
 
 ---
 
-## ✅ Pré-requisitos
+## ✅ Pré-requisito único
 
 Você só precisa ter instalado:
 
 - **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** (Windows, Mac ou Linux)
 
-Nada mais. Sem Java, sem PostgreSQL, sem configuração.
+Nada mais. Sem Node.js, sem Java, sem PostgreSQL.
 
 ---
 
-## 🚀 Como rodar
+## 🚀 Como rodar (3 passos)
 
 **1. Baixe ou clone este repositório**
 
@@ -23,13 +23,19 @@ git clone <url-do-repositório>
 cd venzpro-main
 ```
 
-**2. Suba o sistema com um único comando**
+**2. Suba tudo com um único comando**
 
 ```bash
 docker-compose up -d --build
 ```
 
-Aguarde cerca de **2 a 3 minutos** na primeira vez (precisa baixar as imagens e compilar o backend). Nas próximas vezes será bem mais rápido.
+⏳ Na **primeira vez** aguarde **3 a 5 minutos** — o Docker precisa:
+- Baixar as imagens base
+- Compilar o backend Java
+- Compilar o frontend React
+- Inicializar o banco de dados
+
+Nas próximas vezes será muito mais rápido.
 
 **3. Acesse o sistema**
 
@@ -39,10 +45,10 @@ Abra no navegador: **http://localhost:8080**
 
 ## 🔑 Credenciais padrão
 
-| Campo | Valor |
-|-------|-------|
+| Campo | Valor          |
+|-------|----------------|
 | Email | `admin@venzpro.com` |
-| Senha | `admin123` |
+| Senha | `admin123`     |
 
 > ⚠️ **Troque a senha após o primeiro acesso!**
 
@@ -50,9 +56,8 @@ Abra no navegador: **http://localhost:8080**
 
 ## 📱 Criar sua própria conta
 
-Se preferir criar uma conta nova em vez de usar a padrão:
+Clique em **"Cadastre-se"** na tela de login, ou via API:
 
-**Via API:**
 ```bash
 curl -X POST http://localhost:8080/api/auth/register \
   -H "Content-Type: application/json" \
@@ -64,8 +69,6 @@ curl -X POST http://localhost:8080/api/auth/register \
     "tipoOrganizacao": "REPRESENTANTE"
   }'
 ```
-
-Isso cria uma organização e um usuário ADMIN automaticamente e retorna o token JWT.
 
 ---
 
@@ -97,8 +100,11 @@ Não precisa do `--build` nas próximas vezes, a menos que o código tenha mudad
 ## 🩺 Verificar se está funcionando
 
 ```bash
-# Ver status dos containers
+# Ver status dos 3 containers
 docker-compose ps
+
+# Ver logs do frontend
+docker-compose logs frontend
 
 # Ver logs do backend
 docker-compose logs backend
@@ -113,45 +119,39 @@ curl http://localhost:8080/actuator/health
 
 ---
 
-## 📋 Endpoints principais da API
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| POST | `/api/auth/register` | Criar conta + organização |
-| POST | `/api/auth/login` | Fazer login, recebe JWT |
-| GET | `/api/customers` | Listar clientes |
-| POST | `/api/customers` | Criar cliente |
-| GET | `/api/orders` | Listar pedidos |
-| POST | `/api/orders` | Criar pedido |
-| GET | `/api/events` | Listar eventos |
-| GET | `/api/companies` | Listar empresas |
-
-Todos os endpoints (exceto `/api/auth/**`) exigem o header:
-```
-Authorization: Bearer <token_recebido_no_login>
-```
-
----
-
 ## ❓ Problemas comuns
 
-**Porta 8080 ou 5432 já está em uso**
+**Porta 8080 já está em uso**
 ```bash
 # Ver quem está usando a porta
-lsof -i :8080   # Mac/Linux
+lsof -i :8080        # Mac/Linux
 netstat -ano | findstr :8080   # Windows
 ```
+Encerre o processo que usa a porta ou altere no `docker-compose.yml`:
+```yaml
+ports:
+  - "3000:80"  # agora acesse em http://localhost:3000
+```
 
-**Backend demora para iniciar**
-Normal na primeira vez. Aguarde até ver no log:
+**Backend demora para iniciar / frontend mostra erro de API**
+
+Normal na primeira vez. O frontend aguarda o backend estar saudável antes de subir.
+Se demorar muito, verifique:
+```bash
+docker-compose logs backend
 ```
-Started VenzproApplication in X.XXX seconds
-```
+Aguarde até ver: `Started VenzproApplication in X.XXX seconds`
 
 **Banco de dados corrompido / quero começar do zero**
 ```bash
 docker-compose down -v   # remove tudo incluindo dados
 docker-compose up -d --build
+```
+
+**Frontend não abre**
+```bash
+docker-compose logs frontend
+# Verifique se o nginx subiu corretamente
 ```
 
 ---
