@@ -7,6 +7,9 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -41,8 +44,22 @@ public class Order {
     @Column(nullable = false)
     private OrderStatus status;
 
+    @Column(name = "motivo_cancelamento", columnDefinition = "TEXT")
+    private String motivoCancelamento;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cancelado_por")
+    private User canceladoPor;
+
+    @Column(name = "cancelado_em")
+    private OffsetDateTime canceladoEm;
+
     @Column(columnDefinition = "TEXT")
     private String descricao;
+
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<OrderItem> itens = new ArrayList<>();
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

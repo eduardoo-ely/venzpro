@@ -47,7 +47,8 @@ public class CustomerService {
         var customer = Customer.builder()
                 .nome(req.nome()).telefone(req.telefone())
                 .email(req.email()).cidade(req.cidade())
-                .user(user).organization(org)
+                .cpfCnpj(req.cpfCnpj())
+                .owner(user).createdBy(user).organization(org)
                 .build();
 
         return CustomerResponse.from(customerRepository.save(customer));
@@ -74,6 +75,10 @@ public class CustomerService {
         customer.setTelefone(req.telefone());
         customer.setEmail(req.email());
         customer.setCidade(req.cidade());
+        customer.setCpfCnpj(req.cpfCnpj());
+        if (req.status() != null) {
+            customer.setStatus(req.status());
+        }
 
         return CustomerResponse.from(customerRepository.save(customer));
     }
