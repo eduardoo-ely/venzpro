@@ -1,72 +1,64 @@
 package com.venzpro.config.security;
 
-import io.jsonwebtoken.*;
-import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+import org.springframework.web.filter.OncePerRequestFilter;
 
-import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
-import java.util.Date;
-import java.util.UUID;
+import java.io.IOException;
+import java.util.List;
 
-@Service
-public class JwtService {
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final SecretKey secretKey;
-    private final long expirationMs;
+    private final JwtService jwtService;
 
-    public JwtService(
-            @Value("${jwt.secret}") String secret,
-            @Value("${jwt.expiration}") long expirationMs) {
-        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
-        this.expirationMs = expirationMs;
-    }
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain chain) throws ServletException, IOException {
+        final String token = extractToken(request);
 
-    /** Gera token JWT com userId, organizationId e role como claims. */
-    public String generateToken(UUID userId, UUID organizationId, String email, String role) {
-        return Jwts.builder()
-                .subject(email)
-                .claim("userId", userId.toString())
-                .claim("organizationId", organizationId.toString())
-                .claim("role", role)
-                .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + expirationMs))
-                .signWith(secretKey)
-                .compact();
-    }
-
-    /** Extrai todos os claims do token — lança exceção se inválido ou expirado. */
-    public Claims extractAllClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(secretKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-    }
-
-    public String extractEmail(String token) {
-        return extractAllClaims(token).getSubject();
-    }
-
-    public UUID extractUserId(String token) {
-        return UUID.fromString(extractAllClaims(token).get("userId", String.class));
-    }
-
-    public UUID extractOrganizationId(String token) {
-        return UUID.fromString(extractAllClaims(token).get("organizationId", String.class));
-    }
-
-    public String extractRole(String token) {
-        return extractAllClaims(token).get("role", String.class);
-    }
-
-    public boolean isTokenValid(String token) {
         try {
-            extractAllClaims(token);
-            return true;
-        } catch (JwtException | IllegalArgumentException e) {
-            return false;
+            if (token != null && jwtService.isTokenValid(token)) {
+                var userId         = jwtService.extractUserId(token);
+                var organizationId = jwtService.extractOrganizationId(token);
+                var email          = jwtService.extractEmail(token);
+                var role           = jwtService.extractRole(token);
+
+                // 1. Popula SecurityContext
+                var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
+                var principal   = new VenzproPrincipal(userId, organizationId, email, role, authorities);
+                var auth        = new UsernamePasswordAuthenticationToken(principal, null, authorities);
+                SecurityContextHolder.getContext().setAuthentication(auth);
+
+                // 2. Popula TenantContext — disponível em toda a thread
+                TenantContext.set(organizationId);
+
+                log.debug("JWT válido: userId={} orgId={} role={}", userId, organizationId, role);
+            }
+
+            chain.doFilter(request, response);
+
+        } finally {
+            TenantContext.clear();
         }
+    }
+
+    private String extractToken(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        return (StringUtils.hasText(header) && header.startsWith("Bearer "))
+                ? header.substring(7)
+                : null;
     }
 }

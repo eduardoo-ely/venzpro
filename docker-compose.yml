@@ -31,7 +31,7 @@ services:
       SPRING_DATASOURCE_URL:      jdbc:postgresql://postgres:5432/venzpro
       SPRING_DATASOURCE_USERNAME: venzpro
       SPRING_DATASOURCE_PASSWORD: venzpro123
-      SPRING_JPA_HIBERNATE_DDL_AUTO:    update
+      SPRING_JPA_HIBERNATE_DDL_AUTO:    validate
       SPRING_JPA_SHOW_SQL:              false
       JWT_SECRET:     venzpro-beta-secret-key-troque-em-producao-256bits-minimo
       JWT_EXPIRATION: 86400000

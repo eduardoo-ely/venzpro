@@ -1,4 +1,4 @@
-package com.venzpro.config.security;
+package com.venzpro.infrastructure.security;
 
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;

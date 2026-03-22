@@ -1,4 +1,4 @@
-package com.venzpro.config.security;
+package com.venzpro.infrastructure.security;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;

@@ -80,6 +80,7 @@ public class GlobalExceptionHandler {
 
     // ── 403 — Sem permissão ───────────────────────────────────────────────────
 
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
         return response(HttpStatus.FORBIDDEN,
@@ -91,6 +92,12 @@ public class GlobalExceptionHandler {
         log.error("VIOLAÇÃO MULTI-TENANT: {}", ex.getMessage());
         return response(HttpStatus.FORBIDDEN,
                 "Você não tem permissão para acessar este recurso.");
+    }
+
+    @ExceptionHandler(TenantViolationException.class)
+    public ResponseEntity<Object> handleTenantViolation(TenantViolationException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "Acesso Negado", "message", ex.getMessage()));
     }
 
     // ── 500 — Erro interno (nunca expõe detalhes) ─────────────────────────────

@@ -1,4 +1,4 @@
-package com.venzpro.config.security;
+package com.venzpro.infrastructure.security;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -16,16 +16,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
-/**
- * Filtro de autenticação JWT.
- *
- * Responsabilidades:
- *  1. Extrair e validar o token Bearer do header Authorization
- *  2. Construir VenzproPrincipal com userId + organizationId + role
- *  3. Registrar o principal no SecurityContext do Spring
- *  4. Registrar o organizationId no TenantContext (ThreadLocal)
- *  5. Limpar o TenantContext no finally (evita memory leak)
- */
 
 @Slf4j
 @Component

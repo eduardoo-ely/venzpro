@@ -9,7 +9,6 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <!-- CORRIGIDO: versão 4.0.4 não existe. Usando 3.3.4 (LTS estável) -->
         <version>3.3.4</version>
         <relativePath/>
     </parent>
@@ -22,11 +21,11 @@
 
     <properties>
         <java.version>21</java.version>
-        <!-- Versão da lib JWT — fixada para evitar breaking changes -->
+        <poi.version>5.3.0</poi.version>
+        <opencsv.version>5.9</opencsv.version>
         <jjwt.version>0.12.6</jjwt.version>
     </properties>
 
-    <!-- CORRIGIDO: bloco <dependencies> único, sem aninhamento -->
     <dependencies>
 
         <!-- ==================== WEB ==================== -->
@@ -40,6 +39,7 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
+
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
@@ -53,13 +53,11 @@
         </dependency>
 
         <!-- ==================== SEGURANÇA ==================== -->
-        <!-- ADICIONADO: Spring Security para autenticação e autorização -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
-        <!-- ADICIONADO: JWT — geração e validação de tokens -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
@@ -86,13 +84,11 @@
         </dependency>
 
         <!-- ==================== TESTES ==================== -->
-        <!-- Actuator: habilita /actuator/health para o Docker healthcheck -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- AOP para TenantIsolationAspect -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
@@ -103,10 +99,33 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <!-- ==================== MIGRAÇÕES ==================== -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <!-- ==================== IMPORTAÇÃO / EXPORTAÇÃO ==================== -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.3.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>5.9</version>
         </dependency>
 
     </dependencies>
