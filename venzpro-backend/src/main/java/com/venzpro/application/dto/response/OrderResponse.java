@@ -2,8 +2,10 @@ package com.venzpro.application.dto.response;
 
 import com.venzpro.domain.entity.Order;
 import com.venzpro.domain.enums.OrderStatus;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record OrderResponse(
@@ -13,7 +15,11 @@ public record OrderResponse(
     UUID userId,     String vendedorNome,
     UUID organizationId,
     BigDecimal valorTotal, OrderStatus status,
-    String descricao, LocalDateTime createdAt
+    String descricao,
+    UUID canceladoPor,
+    OffsetDateTime canceladoEm,
+    String motivoCancelamento,
+    LocalDateTime createdAt
 ) {
     public static OrderResponse from(Order o) {
         return new OrderResponse(
@@ -22,7 +28,11 @@ public record OrderResponse(
             o.getCompany().getId(),  o.getCompany().getNome(),
             o.getUser().getId(),     o.getUser().getNome(),
             o.getOrganization().getId(),
-            o.getValorTotal(), o.getStatus(), o.getDescricao(), o.getCreatedAt()
+            o.getValorTotal(), o.getStatus(), o.getDescricao(),
+            o.getCanceladoPor() != null ? o.getCanceladoPor().getId() : null,
+            o.getCanceladoEm(),
+            o.getMotivoCancelamento(),
+            o.getCreatedAt()
         );
     }
 }
