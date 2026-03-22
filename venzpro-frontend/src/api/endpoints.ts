@@ -6,7 +6,7 @@
 import api from './api';
 import type {
   Organization, User, Company, Customer, Order,
-  Event, CatalogFile, OrderStatus,
+  Event, CatalogFile, OrderStatus, CreateOrderPayload,
 } from '@/types';
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ export const companiesApi = {
 
 // ── Customers ─────────────────────────────────────────────────────────────────
 
-export type CustomerPayload = Pick<Customer, 'nome'> & Partial<Pick<Customer, 'telefone' | 'email' | 'cidade'>>;
+export type CustomerPayload = Pick<Customer, 'nome'> & Partial<Pick<Customer, 'telefone' | 'email' | 'cidade' | 'cpfCnpj'>>;
 
 export const customersApi = {
   list:   ()                               => api.get<Customer[]>('/customers').then(r => r.data),
@@ -60,21 +60,13 @@ export const customersApi = {
 
 // ── Orders ────────────────────────────────────────────────────────────────────
 
-export interface OrderPayload {
-  customerId: string;
-  companyId:  string;
-  valorTotal: number;
-  status:     OrderStatus;
-  descricao?: string;
-}
-
 export const ordersApi = {
-  list:         (status?: OrderStatus)              => api.get<Order[]>('/orders', { params: status ? { status } : {} }).then(r => r.data),
-  get:          (id: string)                        => api.get<Order>(`/orders/${id}`).then(r => r.data),
-  create:       (d: OrderPayload)                   => api.post<Order>('/orders', d).then(r => r.data),
-  update:       (id: string, d: OrderPayload)       => api.put<Order>(`/orders/${id}`, d).then(r => r.data),
-  updateStatus: (id: string, status: OrderStatus) => api.patch<Order>(`/orders/${id}/status`, {}, { params: { status } }).then(r => r.data),
-  remove:       (id: string)                        => api.delete(`/orders/${id}`).then(r => r.data),
+  list:         (status?: OrderStatus)                 => api.get<Order[]>('/orders', { params: status ? { status } : {} }).then(r => r.data),
+  get:          (id: string)                           => api.get<Order>(`/orders/${id}`).then(r => r.data),
+  create:       (d: CreateOrderPayload)                => api.post<Order>('/orders', d).then(r => r.data),
+  update:       (id: string, d: CreateOrderPayload)    => api.put<Order>(`/orders/${id}`, d).then(r => r.data),
+  updateStatus: (id: string, status: OrderStatus)      => api.patch<Order>(`/orders/${id}/status`, {}, { params: { status } }).then(r => r.data),
+  remove:       (id: string)                           => api.delete(`/orders/${id}`).then(r => r.data),
 };
 
 // ── Events ────────────────────────────────────────────────────────────────────

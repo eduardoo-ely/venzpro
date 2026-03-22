@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ordersApi, type OrderPayload } from '@/api/endpoints';
+import { ordersApi } from '@/api/endpoints';
 import { notify } from '@/lib/toast';
-import type { OrderStatus } from '@/types';
+import type { CreateOrderPayload, OrderStatus } from '@/types';
 
 const KEY = ['orders'] as const;
 
@@ -14,13 +14,13 @@ export function useOrders(statusFilter?: OrderStatus) {
   });
 
   const create = useMutation({
-    mutationFn: (d: OrderPayload) => ordersApi.create(d),
+    mutationFn: (payload: CreateOrderPayload) => ordersApi.create(payload),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: KEY }); notify.success('Pedido criado!'); },
     onError:    (e) => notify.apiError(e, 'Erro ao criar pedido.'),
   });
 
   const update = useMutation({
-    mutationFn: ({ id, ...d }: { id: string } & OrderPayload) => ordersApi.update(id, d),
+    mutationFn: ({ id, ...payload }: { id: string } & CreateOrderPayload) => ordersApi.update(id, payload),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: KEY }); notify.success('Pedido atualizado!'); },
     onError:    (e) => notify.apiError(e, 'Erro ao atualizar pedido.'),
   });

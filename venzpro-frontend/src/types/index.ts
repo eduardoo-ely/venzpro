@@ -1,6 +1,7 @@
 export type OrganizationType = 'REPRESENTANTE' | 'EMPRESA';
-export type UserRole = 'ADMIN' | 'VENDEDOR';
-export type OrderStatus = 'ORCAMENTO' | 'FECHADO' | 'CANCELADO';
+export type UserRole = 'ADMIN' | 'GERENTE' | 'VENDEDOR' | 'SUPORTE';
+export type OrderStatus = 'ORCAMENTO' | 'ENVIADO' | 'APROVADO' | 'REJEITADO' | 'CONCLUIDO' | 'CANCELADO';
+export type CustomerStatus = 'PENDENTE' | 'APROVADO' | 'REJEITADO';
 export type EventType = 'VISITA' | 'REUNIAO' | 'FOLLOW_UP';
 export type EventStatus = 'AGENDADO' | 'CONCLUIDO' | 'CANCELADO';
 export type FileType = 'PDF' | 'IMAGEM';
@@ -32,14 +33,34 @@ export interface Customer {
   telefone?: string;
   email?: string;
   cidade?: string;
-  userId: string;
+  status: CustomerStatus;
+  cpfCnpj?: string;
+  ownerId?: string;
   organizationId: string;
   createdAt?: string;
 }
 
+export interface OrderItem {
+  id: string;
+  productId: string;
+  nomeProduto?: string;
+  quantidade: number;
+  precoUnitario: number;
+  subtotal: number;
+}
+
+export interface CreateOrderPayload {
+  customerId: string;
+  companyId: string;
+  descricao?: string;
+  items: Array<{
+    productId: string;
+    quantidade: number;
+  }>;
+}
+
 export interface Order {
   id: string;
-  // Campos retornados pelo backend (OrderResponse.java)
   customerId: string;
   clienteNome?: string;
   companyId: string;
@@ -49,6 +70,9 @@ export interface Order {
   valorTotal: number;
   status: OrderStatus;
   descricao?: string;
+  items: OrderItem[];
+  canceladoPor?: string;
+  motivoCancelamento?: string;
   createdAt?: string;
   organizationId: string;
 }
@@ -57,7 +81,6 @@ export interface Event {
   id: string;
   titulo: string;
   tipo: EventType;
-  // Campos retornados pelo backend (EventResponse.java)
   customerId?: string;
   clienteNome?: string;
   companyId?: string;
@@ -77,7 +100,6 @@ export interface CatalogFile {
   nome: string;
   url: string;
   tipo: FileType;
-  // Campo retornado pelo backend (CatalogFileResponse.java)
   companyId: string;
   empresaNome?: string;
   organizationId: string;

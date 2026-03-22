@@ -18,46 +18,69 @@ import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { AvatarInitials } from '@/components/AvatarInitials';
 import { motion } from 'framer-motion';
-import type { Order, OrderStatus } from '@/types';
+import type { CreateOrderPayload, Order, OrderStatus } from '@/types';
 
 const statusConfig: Record<OrderStatus, { label: string; class: string; color: string }> = {
   ORCAMENTO: { label: 'Orçamento', class: 'status-orcamento', color: 'hsl(38 92% 50%)' },
-  FECHADO:   { label: 'Fechado',   class: 'status-fechado',   color: 'hsl(160 84% 39%)' },
+  ENVIADO: { label: 'Enviado', class: 'status-enviado', color: 'hsl(217 91% 60%)' },
+  APROVADO: { label: 'Aprovado', class: 'status-aprovado', color: 'hsl(160 84% 39%)' },
+  REJEITADO: { label: 'Rejeitado', class: 'status-rejeitado', color: 'hsl(0 72% 51%)' },
+  CONCLUIDO: { label: 'Concluído', class: 'status-concluido', color: 'hsl(142 71% 45%)' },
   CANCELADO: { label: 'Cancelado', class: 'status-cancelado', color: 'hsl(0 84% 60%)' },
 };
 
-type Form = { customerId: string; companyId: string; valorTotal: string; status: OrderStatus; descricao: string };
-const emptyForm = (status: OrderStatus = 'ORCAMENTO'): Form =>
-  ({ customerId: '', companyId: '', valorTotal: '', status, descricao: '' });
+type Form = {
+  customerId: string;
+  companyId: string;
+  descricao: string;
+  productId: string;
+  quantidade: string;
+};
+
+const emptyForm = (): Form => ({ customerId: '', companyId: '', descricao: '', productId: '', quantidade: '1' });
 
 export default function PedidosPage() {
-  const { orders,    isLoading, create, update, updateStatus, remove } = useOrders();
+  const { orders, isLoading, create, update, updateStatus, remove } = useOrders();
   const { customers, isLoading: loadingC } = useCustomers();
   const { companies, isLoading: loadingCo } = useCompanies();
 
-  const [open,     setOpen]     = useState(false);
-  const [editing,  setEditing]  = useState<Order | null>(null);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Order | null>(null);
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
-  const [form,     setForm]     = useState<Form>(emptyForm());
+  const [form, setForm] = useState<Form>(emptyForm());
 
-  const openNew  = (status: OrderStatus = 'ORCAMENTO') => { setEditing(null); setForm(emptyForm(status)); setOpen(true); };
+  const openNew = () => { setEditing(null); setForm(emptyForm()); setOpen(true); };
   const openEdit = (o: Order) => {
+    const firstItem = o.items[0];
     setEditing(o);
-    setForm({ customerId: o.customerId, companyId: o.companyId, valorTotal: String(o.valorTotal), status: o.status, descricao: o.descricao ?? '' });
+    setForm({
+      customerId: o.customerId,
+      companyId: o.companyId,
+      descricao: o.descricao ?? '',
+      productId: firstItem?.productId ?? '',
+      quantidade: firstItem ? String(firstItem.quantidade) : '1',
+    });
     setOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = { customerId: form.customerId, companyId: form.companyId, valorTotal: parseFloat(form.valorTotal) || 0, status: form.status, descricao: form.descricao || undefined };
+
+    const payload: CreateOrderPayload = {
+      customerId: form.customerId,
+      companyId: form.companyId,
+      descricao: form.descricao || undefined,
+      items: [{ productId: form.productId, quantidade: Number(form.quantidade) || 1 }],
+    };
+
     if (editing) await update.mutateAsync({ id: editing.id, ...payload });
-    else         await create.mutateAsync(payload);
+    else await create.mutateAsync(payload);
     setOpen(false);
   };
 
-  const isPending   = create.isPending || update.isPending;
+  const isPending = create.isPending || update.isPending;
   const isLoadingAll = isLoading || loadingC || loadingCo;
-  const columns: OrderStatus[] = ['ORCAMENTO', 'FECHADO', 'CANCELADO'];
+  const columns: OrderStatus[] = ['ORCAMENTO', 'ENVIADO', 'APROVADO', 'CANCELADO'];
 
   return (
     <div className="space-y-6">
@@ -93,7 +116,7 @@ export default function PedidosPage() {
       )}
 
       {!isLoadingAll && orders.length > 0 && viewMode === 'kanban' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {columns.map(col => {
             const colOrders = orders.filter(o => o.status === col);
             const cfg = statusConfig[col];
@@ -105,7 +128,7 @@ export default function PedidosPage() {
                     <span className="text-sm font-semibold">{cfg.label}</span>
                     <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{colOrders.length}</span>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openNew(col)}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openNew()}>
                     <Plus className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -124,14 +147,15 @@ export default function PedidosPage() {
                             </div>
                             <GripVertical className="h-4 w-4 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
-                          <div className="flex items-center justify-between mt-3">
+                          <div className="space-y-1 mt-3">
                             <span className="text-lg font-bold">R$ {Number(order.valorTotal).toFixed(2)}</span>
-                            <span className="text-[10px] text-muted-foreground">{order.createdAt ? new Date(order.createdAt).toLocaleDateString('pt-BR') : ''}</span>
+                            <p className="text-[10px] text-muted-foreground">{order.items.length} item(ns)</p>
+                            <span className="text-[10px] text-muted-foreground block">{order.createdAt ? new Date(order.createdAt).toLocaleDateString('pt-BR') : ''}</span>
                           </div>
                           {col === 'ORCAMENTO' && (
                             <div className="flex gap-1 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] text-status-success"
-                                onClick={e => { e.stopPropagation(); updateStatus.mutate({ id: order.id, status: 'FECHADO' }); }}>Fechar</Button>
+                                onClick={e => { e.stopPropagation(); updateStatus.mutate({ id: order.id, status: 'ENVIADO' }); }}>Enviar</Button>
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] text-status-danger"
                                 onClick={e => { e.stopPropagation(); updateStatus.mutate({ id: order.id, status: 'CANCELADO' }); }}>Cancelar</Button>
                             </div>
@@ -155,6 +179,7 @@ export default function PedidosPage() {
                 <TableRow className="border-border/30 hover:bg-transparent">
                   <TableHead className="text-xs text-muted-foreground">Cliente</TableHead>
                   <TableHead className="text-xs text-muted-foreground">Empresa</TableHead>
+                  <TableHead className="text-xs text-muted-foreground">Itens</TableHead>
                   <TableHead className="text-xs text-muted-foreground">Valor</TableHead>
                   <TableHead className="text-xs text-muted-foreground">Status</TableHead>
                   <TableHead className="text-xs text-muted-foreground">Data</TableHead>
@@ -166,6 +191,7 @@ export default function PedidosPage() {
                   <TableRow key={order.id} className="border-border/20 hover:bg-primary/5 transition-colors">
                     <TableCell><div className="flex items-center gap-2"><AvatarInitials name={order.clienteNome || 'C'} size="sm" /><span className="text-sm font-medium">{order.clienteNome || order.customerId}</span></div></TableCell>
                     <TableCell className="text-sm text-muted-foreground">{order.empresaNome || order.companyId}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{order.items.length}</TableCell>
                     <TableCell className="text-sm font-medium">R$ {Number(order.valorTotal).toFixed(2)}</TableCell>
                     <TableCell><Badge variant="outline" className={`${statusConfig[order.status].class} text-[10px] font-semibold`}>{statusConfig[order.status].label}</Badge></TableCell>
                     <TableCell className="text-sm text-muted-foreground">{order.createdAt ? new Date(order.createdAt).toLocaleDateString('pt-BR') : '-'}</TableCell>
@@ -211,23 +237,16 @@ export default function PedidosPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Valor Total *</Label>
-                <Input type="number" step="0.01" min="0" value={form.valorTotal} onChange={e => setForm(f => ({ ...f, valorTotal: e.target.value }))} required className="bg-muted border-border/50" />
+                <Label>Produto ID *</Label>
+                <Input value={form.productId} onChange={e => setForm(f => ({ ...f, productId: e.target.value }))} required className="bg-muted border-border/50" placeholder="UUID do produto" />
               </div>
               <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as OrderStatus }))}>
-                  <SelectTrigger className="bg-muted border-border/50"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ORCAMENTO">Orçamento</SelectItem>
-                    <SelectItem value="FECHADO">Fechado</SelectItem>
-                    <SelectItem value="CANCELADO">Cancelado</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Quantidade *</Label>
+                <Input type="number" step="0.0001" min="0.0001" value={form.quantidade} onChange={e => setForm(f => ({ ...f, quantidade: e.target.value }))} required className="bg-muted border-border/50" />
               </div>
             </div>
             <div className="space-y-2"><Label>Descrição</Label><Textarea value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} className="bg-muted border-border/50" rows={3} /></div>
-            <Button type="submit" className="w-full gradient-primary border-0 text-white" disabled={isPending || !form.customerId || !form.companyId}>
+            <Button type="submit" className="w-full gradient-primary border-0 text-white" disabled={isPending || !form.customerId || !form.companyId || !form.productId}>
               {isPending ? 'Salvando...' : editing ? 'Salvar' : 'Criar Pedido'}
             </Button>
           </form>

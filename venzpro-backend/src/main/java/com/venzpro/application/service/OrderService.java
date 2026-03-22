@@ -1,16 +1,29 @@
 package com.venzpro.application.service;
 
+import com.venzpro.application.dto.request.OrderItemRequest;
 import com.venzpro.application.dto.request.OrderRequest;
 import com.venzpro.application.dto.response.OrderResponse;
 import com.venzpro.domain.entity.Order;
+import com.venzpro.domain.entity.OrderItem;
+import com.venzpro.domain.entity.Product;
+import com.venzpro.domain.entity.User;
+import com.venzpro.domain.enums.CustomerStatus;
 import com.venzpro.domain.enums.OrderStatus;
-import com.venzpro.domain.repository.*;
-import com.venzpro.application.service.AuditService;
+import com.venzpro.domain.enums.UserRole;
+import com.venzpro.domain.repository.CompanyRepository;
+import com.venzpro.domain.repository.CustomerRepository;
+import com.venzpro.domain.repository.OrderRepository;
+import com.venzpro.domain.repository.OrganizationRepository;
+import com.venzpro.domain.repository.ProductRepository;
+import com.venzpro.domain.repository.UserRepository;
+import com.venzpro.exception.BusinessException;
 import com.venzpro.exception.ResourceNotFoundException;
+import com.venzpro.exception.TenantViolationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,23 +36,33 @@ public class OrderService {
     private final CompanyRepository companyRepository;
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
+    private final ProductRepository productRepository;
     private final AuditService auditService;
 
     @Transactional
     public OrderResponse create(OrderRequest req, UUID userId, UUID organizationId) {
         var customer = customerRepository.findByIdAndOrganizationId(req.customerId(), organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente", req.customerId()));
+        validateCustomerForOrder(customer, userId);
+
         var company = companyRepository.findByIdAndOrganizationId(req.companyId(), organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()));
-        var user = userRepository.findById(userId)
+        var user = userRepository.findByIdAndOrganizationId(userId, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuário", userId));
         var org = organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organização", organizationId));
 
         var order = Order.builder()
-                .customer(customer).company(company).user(user).organization(org)
-                .valorTotal(req.valorTotal()).status(req.status()).descricao(req.descricao())
+                .customer(customer)
+                .company(company)
+                .user(user)
+                .organization(org)
+                .descricao(req.descricao())
                 .build();
+        order.setStatus(OrderStatus.ORCAMENTO);
+
+        applyItems(order, req.items(), organizationId);
+
         var savedOrder = orderRepository.save(order);
         auditService.log(organizationId, userId, AuditService.CREATE_ORDER,
                 "Pedido", savedOrder.getId(), "Cliente: " + customer.getNome());
@@ -75,14 +98,16 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido", id));
         var customer = customerRepository.findByIdAndOrganizationId(req.customerId(), organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente", req.customerId()));
+        validateCustomerForOrder(customer, userId);
+
         var company = companyRepository.findByIdAndOrganizationId(req.companyId(), organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()));
 
         order.setCustomer(customer);
         order.setCompany(company);
-        order.setValorTotal(req.valorTotal());
-        order.setStatus(req.status());
         order.setDescricao(req.descricao());
+
+        applyItems(order, req.items(), organizationId);
         return OrderResponse.from(orderRepository.save(order));
     }
 
@@ -91,5 +116,42 @@ public class OrderService {
         var order = orderRepository.findByIdAndOrganizationId(id, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido", id));
         orderRepository.delete(order);
+    }
+
+    private void validateCustomerForOrder(com.venzpro.domain.entity.Customer customer, UUID userId) {
+        if (customer.getStatus() != CustomerStatus.APROVADO) {
+            throw new BusinessException("Cliente precisa estar APROVADO para gerar pedido");
+        }
+
+        var user = userRepository.findByIdForCurrentTenant(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuário", userId));
+
+        if (user.getRole() == UserRole.VENDEDOR) {
+            if (customer.getOwner() == null || !customer.getOwner().getId().equals(userId)) {
+                throw new TenantViolationException("Este cliente não pertence à sua carteira");
+            }
+        }
+    }
+
+    private void applyItems(Order order, List<OrderItemRequest> items, UUID organizationId) {
+        order.clearItens();
+
+        for (OrderItemRequest itemRequest : items) {
+            Product product = productRepository.findByIdAndOrganizationId(itemRequest.productId(), organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Produto", itemRequest.productId()));
+
+            OrderItem item = OrderItem.builder()
+                    .product(product)
+                    .quantidade(itemRequest.quantidade())
+                    .precoUnitario(defaultIfNull(product.getPrecoBase()))
+                    .build();
+            order.addItem(item);
+        }
+
+        order.recalcularTotal();
+    }
+
+    private BigDecimal defaultIfNull(BigDecimal valor) {
+        return valor != null ? valor : BigDecimal.ZERO;
     }
 }
