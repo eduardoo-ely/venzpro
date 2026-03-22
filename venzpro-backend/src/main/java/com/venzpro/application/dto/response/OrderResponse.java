@@ -5,6 +5,7 @@ import com.venzpro.domain.enums.OrderStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,6 +23,7 @@ public record OrderResponse(
     String descricao,
     List<OrderItemResponse> items,
     UUID canceladoPor,
+    OffsetDateTime canceladoEm,
     String motivoCancelamento,
     LocalDateTime createdAt
 ) {
@@ -40,6 +42,7 @@ public record OrderResponse(
             o.getDescricao(),
             o.getItens().stream().map(OrderItemResponse::from).toList(),
             o.getCanceladoPor() != null ? o.getCanceladoPor().getId() : null,
+            o.getCanceladoEm(),
             o.getMotivoCancelamento(),
             o.getCreatedAt()
         );

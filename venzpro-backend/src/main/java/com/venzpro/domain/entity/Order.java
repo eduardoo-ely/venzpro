@@ -56,6 +56,16 @@ public class Order {
     @Column(name = "cancelado_em")
     private OffsetDateTime canceladoEm;
 
+    @Column(name = "motivo_cancelamento", columnDefinition = "TEXT")
+    private String motivoCancelamento;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cancelado_por")
+    private User canceladoPor;
+
+    @Column(name = "cancelado_em")
+    private OffsetDateTime canceladoEm;
+
     @Column(columnDefinition = "TEXT")
     private String descricao;
 
