@@ -5,7 +5,7 @@
  */
 import api from './api';
 import type {
-  Organization, User, Company, Customer, Order,
+  Organization, User, Company, Customer, Order, Product,
   Event, CatalogFile, OrderStatus, CreateOrderPayload,
 } from '@/types';
 
@@ -67,6 +67,11 @@ export const ordersApi = {
   update:       (id: string, d: CreateOrderPayload)    => api.put<Order>(`/orders/${id}`, d).then(r => r.data),
   updateStatus: (id: string, status: OrderStatus)      => api.patch<Order>(`/orders/${id}/status`, {}, { params: { status } }).then(r => r.data),
   remove:       (id: string)                           => api.delete(`/orders/${id}`).then(r => r.data),
+};
+
+export const productsApi = {
+  list: () => api.get<{ content: Product[] }>('/products', { params: { page: 0, size: 1000, sort: 'nome,asc' } }).then(r => r.data.content),
+  get:  (id: string) => api.get<Product>(`/products/${id}`).then(r => r.data),
 };
 
 // ── Events ────────────────────────────────────────────────────────────────────

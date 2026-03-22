@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useOrders } from '@/hooks/useOrders';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useCompanies } from '@/hooks/useCompanies';
+import { useProducts } from '@/hooks/useProducts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,6 +44,7 @@ export default function PedidosPage() {
   const { orders, isLoading, create, update, updateStatus, remove } = useOrders();
   const { customers, isLoading: loadingC } = useCustomers();
   const { companies, isLoading: loadingCo } = useCompanies();
+  const { products, isLoading: loadingP } = useProducts();
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
@@ -51,6 +53,9 @@ export default function PedidosPage() {
 
   const openNew = () => { setEditing(null); setForm(emptyForm()); setOpen(true); };
   const openEdit = (o: Order) => {
+    if (o.items.length > 1) {
+      console.warn('Pedido com múltiplos itens - apenas o primeiro será editado');
+    }
     const firstItem = o.items[0];
     setEditing(o);
     setForm({
@@ -79,8 +84,8 @@ export default function PedidosPage() {
   };
 
   const isPending = create.isPending || update.isPending;
-  const isLoadingAll = isLoading || loadingC || loadingCo;
-  const columns: OrderStatus[] = ['ORCAMENTO', 'ENVIADO', 'APROVADO', 'CANCELADO'];
+  const isLoadingAll = isLoading || loadingC || loadingCo || loadingP;
+  const columns: OrderStatus[] = ['ORCAMENTO', 'ENVIADO', 'APROVADO', 'REJEITADO', 'CONCLUIDO', 'CANCELADO'];
 
   return (
     <div className="space-y-6">
@@ -116,7 +121,7 @@ export default function PedidosPage() {
       )}
 
       {!isLoadingAll && orders.length > 0 && viewMode === 'kanban' && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {columns.map(col => {
             const colOrders = orders.filter(o => o.status === col);
             const cfg = statusConfig[col];
@@ -237,8 +242,17 @@ export default function PedidosPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Produto ID *</Label>
-                <Input value={form.productId} onChange={e => setForm(f => ({ ...f, productId: e.target.value }))} required className="bg-muted border-border/50" placeholder="UUID do produto" />
+                <Label>Produto *</Label>
+                <Select value={form.productId} onValueChange={v => setForm(f => ({ ...f, productId: v }))}>
+                  <SelectTrigger className="bg-muted border-border/50">
+                    <SelectValue placeholder="Selecione um produto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map(product => (
+                      <SelectItem key={product.id} value={product.id}>{product.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Quantidade *</Label>

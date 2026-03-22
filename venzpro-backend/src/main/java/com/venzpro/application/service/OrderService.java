@@ -5,6 +5,7 @@ import com.venzpro.application.dto.request.OrderRequest;
 import com.venzpro.application.dto.response.OrderResponse;
 import com.venzpro.domain.entity.Order;
 import com.venzpro.domain.entity.OrderItem;
+import com.venzpro.domain.entity.Customer;
 import com.venzpro.domain.entity.Product;
 import com.venzpro.domain.entity.User;
 import com.venzpro.domain.enums.CustomerStatus;
@@ -23,7 +24,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -43,12 +43,12 @@ public class OrderService {
     public OrderResponse create(OrderRequest req, UUID userId, UUID organizationId) {
         var customer = customerRepository.findByIdAndOrganizationId(req.customerId(), organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente", req.customerId()));
-        validateCustomerForOrder(customer, userId);
+        var user = userRepository.findByIdAndOrganizationId(userId, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuário", userId));
+        validateCustomerForOrder(customer, user);
 
         var company = companyRepository.findByIdAndOrganizationId(req.companyId(), organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()));
-        var user = userRepository.findByIdAndOrganizationId(userId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário", userId));
         var org = organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organização", organizationId));
 
@@ -98,7 +98,9 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido", id));
         var customer = customerRepository.findByIdAndOrganizationId(req.customerId(), organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente", req.customerId()));
-        validateCustomerForOrder(customer, userId);
+        var user = userRepository.findByIdAndOrganizationId(userId, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuário", userId));
+        validateCustomerForOrder(customer, user);
 
         var company = companyRepository.findByIdAndOrganizationId(req.companyId(), organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()));
@@ -118,32 +120,37 @@ public class OrderService {
         orderRepository.delete(order);
     }
 
-    private void validateCustomerForOrder(com.venzpro.domain.entity.Customer customer, UUID userId) {
+    private void validateCustomerForOrder(Customer customer, User user) {
         if (customer.getStatus() != CustomerStatus.APROVADO) {
             throw new BusinessException("Cliente precisa estar APROVADO para gerar pedido");
         }
 
-        var user = userRepository.findByIdForCurrentTenant(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário", userId));
-
         if (user.getRole() == UserRole.VENDEDOR) {
-            if (customer.getOwner() == null || !customer.getOwner().getId().equals(userId)) {
+            if (customer.getOwner() == null || !customer.getOwner().getId().equals(user.getId())) {
                 throw new TenantViolationException("Este cliente não pertence à sua carteira");
             }
         }
     }
 
     private void applyItems(Order order, List<OrderItemRequest> items, UUID organizationId) {
+        if (items == null || items.isEmpty()) {
+            throw new BusinessException("Pedido deve conter ao menos um item");
+        }
+
         order.clearItens();
 
         for (OrderItemRequest itemRequest : items) {
             Product product = productRepository.findByIdAndOrganizationId(itemRequest.productId(), organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Produto", itemRequest.productId()));
 
+            if (product.getPrecoBase() == null) {
+                throw new BusinessException("Produto " + product.getId() + " não possui preço definido");
+            }
+
             OrderItem item = OrderItem.builder()
                     .product(product)
                     .quantidade(itemRequest.quantidade())
-                    .precoUnitario(defaultIfNull(product.getPrecoBase()))
+                    .precoUnitario(product.getPrecoBase())
                     .build();
             order.addItem(item);
         }
@@ -151,7 +158,4 @@ public class OrderService {
         order.recalcularTotal();
     }
 
-    private BigDecimal defaultIfNull(BigDecimal valor) {
-        return valor != null ? valor : BigDecimal.ZERO;
-    }
 }

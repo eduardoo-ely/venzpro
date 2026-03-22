@@ -56,16 +56,6 @@ public class Order {
     @Column(name = "cancelado_em")
     private OffsetDateTime canceladoEm;
 
-    @Column(name = "motivo_cancelamento", columnDefinition = "TEXT")
-    private String motivoCancelamento;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "cancelado_por")
-    private User canceladoPor;
-
-    @Column(name = "cancelado_em")
-    private OffsetDateTime canceladoEm;
-
     @Column(columnDefinition = "TEXT")
     private String descricao;
 
@@ -91,6 +81,9 @@ public class Order {
 
     public void recalcularTotal() {
         this.valorTotal = itens.stream()
+                .filter(item -> item != null
+                        && item.getPrecoUnitario() != null
+                        && item.getQuantidade() != null)
                 .map(item -> item.getPrecoUnitario().multiply(item.getQuantidade()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }

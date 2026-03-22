@@ -75,7 +75,9 @@ public class CustomerService {
         customer.setTelefone(req.telefone());
         customer.setEmail(req.email());
         customer.setCidade(req.cidade());
-        customer.setCpfCnpj(req.cpfCnpj());
+        if (req.cpfCnpj() != null) {
+            customer.setCpfCnpj(req.cpfCnpj());
+        }
         if (req.status() != null) {
             customer.setStatus(req.status());
         }
