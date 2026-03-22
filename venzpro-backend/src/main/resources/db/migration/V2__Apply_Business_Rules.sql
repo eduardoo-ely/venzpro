@@ -74,8 +74,8 @@ CREATE TABLE customer_owner_history (
 CREATE TABLE order_status_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-    old_status VARCHAR(20),
-    new_status VARCHAR(20) NOT NULL,
+    old_status VARCHAR(20) CHECK (old_status IS NULL OR old_status IN ('ORCAMENTO','ENVIADO','APROVADO','REJEITADO','CONCLUIDO','CANCELADO')),
+    new_status VARCHAR(20) NOT NULL CHECK (new_status IN ('ORCAMENTO','ENVIADO','APROVADO','REJEITADO','CONCLUIDO','CANCELADO')),
     changed_by UUID NOT NULL REFERENCES users(id),
     motivo TEXT,
     changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

@@ -27,6 +27,21 @@ export interface Company {
   createdAt?: string;
 }
 
+export interface Product {
+  id: string;
+  organizationId: string;
+  companyId?: string;
+  empresaNome?: string;
+  nome: string;
+  descricao?: string;
+  precoBase?: number;
+  unidade?: string;
+  ativo?: boolean;
+  codigoSku?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Customer {
   id: string;
   nome: string;

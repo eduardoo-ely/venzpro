@@ -10,6 +10,6 @@ public record CustomerRequest(
     @Pattern(regexp = "^[0-9\\s()+-]*$", message = "Telefone inválido") String telefone,
     @Email(message = "Email inválido") String email,
     String cidade,
-    String cpfCnpj,
+    @Pattern(regexp = "^$|^\\d{11}$|^\\d{14}$", message = "CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos") String cpfCnpj,
     CustomerStatus status
 ) {}
