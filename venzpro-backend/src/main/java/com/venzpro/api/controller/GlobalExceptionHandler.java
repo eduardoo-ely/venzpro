@@ -1,8 +1,8 @@
 package com.venzpro.api.controller;
 
-import com.venzpro.exception.BusinessException;
-import com.venzpro.exception.ResourceNotFoundException;
-import com.venzpro.exception.TenantViolationException;
+import com.venzpro.infrastructure.exception.BusinessException;
+import com.venzpro.infrastructure.exception.ResourceNotFoundException;
+import com.venzpro.infrastructure.exception.TenantViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -80,7 +80,6 @@ public class GlobalExceptionHandler {
 
     // ── 403 — Sem permissão ───────────────────────────────────────────────────
 
-
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
         return response(HttpStatus.FORBIDDEN,
@@ -92,12 +91,6 @@ public class GlobalExceptionHandler {
         log.error("VIOLAÇÃO MULTI-TENANT: {}", ex.getMessage());
         return response(HttpStatus.FORBIDDEN,
                 "Você não tem permissão para acessar este recurso.");
-    }
-
-    @ExceptionHandler(TenantViolationException.class)
-    public ResponseEntity<Object> handleTenantViolation(TenantViolationException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Acesso Negado", "message", ex.getMessage()));
     }
 
     // ── 500 — Erro interno (nunca expõe detalhes) ─────────────────────────────

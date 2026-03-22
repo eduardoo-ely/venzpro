@@ -3,7 +3,7 @@ package com.venzpro.api.controller;
 import com.venzpro.application.dto.request.CompanyRequest;
 import com.venzpro.application.dto.response.CompanyResponse;
 import com.venzpro.application.service.CompanyService;
-import com.venzpro.config.security.VenzproPrincipal;
+import com.venzpro.infrastructure.security.VenzproPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

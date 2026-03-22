@@ -17,9 +17,9 @@ import com.venzpro.domain.repository.OrderRepository;
 import com.venzpro.domain.repository.OrganizationRepository;
 import com.venzpro.domain.repository.ProductRepository;
 import com.venzpro.domain.repository.UserRepository;
-import com.venzpro.exception.BusinessException;
-import com.venzpro.exception.ResourceNotFoundException;
-import com.venzpro.exception.TenantViolationException;
+import com.venzpro.infrastructure.exception.BusinessException;
+import com.venzpro.infrastructure.exception.ResourceNotFoundException;
+import com.venzpro.infrastructure.exception.TenantViolationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -124,7 +124,6 @@ public class OrderService {
         if (customer.getStatus() != CustomerStatus.APROVADO) {
             throw new BusinessException("Cliente precisa estar APROVADO para gerar pedido");
         }
-
         if (user.getRole() == UserRole.VENDEDOR) {
             if (customer.getOwner() == null || !customer.getOwner().getId().equals(user.getId())) {
                 throw new TenantViolationException("Este cliente não pertence à sua carteira");
@@ -157,5 +156,4 @@ public class OrderService {
 
         order.recalcularTotal();
     }
-
 }

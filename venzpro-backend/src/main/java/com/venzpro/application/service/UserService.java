@@ -2,8 +2,8 @@ package com.venzpro.application.service;
 
 import com.venzpro.application.dto.request.UpdateUserRoleRequest;
 import com.venzpro.application.dto.response.UserResponse;
+import com.venzpro.infrastructure.exception.ResourceNotFoundException;
 import com.venzpro.domain.repository.UserRepository;
-import com.venzpro.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

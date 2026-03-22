@@ -2,12 +2,12 @@ package com.venzpro.application.service;
 
 import com.venzpro.application.dto.request.CustomerRequest;
 import com.venzpro.application.dto.response.CustomerResponse;
-import com.venzpro.config.security.TenantContext;
+import com.venzpro.infrastructure.security.TenantContext;
+import com.venzpro.infrastructure.exception.ResourceNotFoundException;
 import com.venzpro.domain.entity.Customer;
 import com.venzpro.domain.repository.CustomerRepository;
 import com.venzpro.domain.repository.OrganizationRepository;
 import com.venzpro.domain.repository.UserRepository;
-import com.venzpro.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,18 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * CustomerService refatorado para multi-tenant real.
- *
- * ANTES: todos os métodos recebiam UUID organizationId como parâmetro.
- *        O organizationId vinha do controller, que pegava do principal.
- *
- * AGORA: o organizationId é lido diretamente do TenantContext (ThreadLocal).
- *        O controller não precisa mais passar organizationId.
- *        É impossível acessar dados de outra organização por acidente.
- *
- * O mesmo padrão se aplica a todos os outros Services.
- */
 @Service
 @RequiredArgsConstructor
 public class CustomerService {
@@ -37,7 +25,7 @@ public class CustomerService {
 
     @Transactional
     public CustomerResponse create(CustomerRequest req, UUID userId) {
-        UUID orgId = TenantContext.get();   // ← vem do JWT, não do frontend
+        UUID orgId = TenantContext.get();
 
         var user = userRepository.findByIdForCurrentTenant(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuário", userId));
@@ -56,7 +44,6 @@ public class CustomerService {
 
     @Transactional(readOnly = true)
     public List<CustomerResponse> findAll() {
-        // TenantAwareRepository injeta organizationId automaticamente
         return customerRepository.findAllForCurrentTenant()
                 .stream().map(CustomerResponse::from).toList();
     }
@@ -64,7 +51,6 @@ public class CustomerService {
     @Transactional(readOnly = true)
     public CustomerResponse findById(UUID id) {
         return CustomerResponse.from(customerRepository.getByIdOrThrow(id, "Cliente"));
-        // se não encontrar OU pertencer a outra org → 404
     }
 
     @Transactional

@@ -3,7 +3,7 @@ package com.venzpro.api.controller;
 import com.venzpro.application.dto.request.UpdateUserRoleRequest;
 import com.venzpro.application.dto.response.UserResponse;
 import com.venzpro.application.service.UserService;
-import com.venzpro.config.security.VenzproPrincipal;
+import com.venzpro.infrastructure.security.VenzproPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,20 +21,17 @@ public class UserController {
 
     private final UserService userService;
 
-    /** Lista todos os usuários da organização do token */
     @GetMapping
     public List<UserResponse> findAll(@AuthenticationPrincipal VenzproPrincipal principal) {
         return userService.findByOrganization(principal.organizationId());
     }
 
-    /** Busca um usuário por ID — só da mesma organização */
     @GetMapping("/{id}")
     public UserResponse findById(@PathVariable UUID id,
                                  @AuthenticationPrincipal VenzproPrincipal principal) {
         return userService.findById(id, principal.organizationId());
     }
 
-    /** Altera a role de um usuário — somente ADMIN */
     @PatchMapping("/{id}/role")
     @PreAuthorize("hasRole('ADMIN')")
     public UserResponse updateRole(@PathVariable UUID id,
@@ -43,7 +40,6 @@ public class UserController {
         return userService.updateRole(id, principal.organizationId(), req);
     }
 
-    /** Remove um usuário — somente ADMIN */
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasRole('ADMIN')")

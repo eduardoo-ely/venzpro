@@ -2,13 +2,13 @@ package com.venzpro.application.service;
 
 import com.venzpro.application.dto.request.InviteRequest;
 import com.venzpro.application.dto.response.UserResponse;
-import com.venzpro.config.security.TenantContext;
+import com.venzpro.infrastructure.security.TenantContext;
+import com.venzpro.infrastructure.exception.BusinessException;
+import com.venzpro.infrastructure.exception.ResourceNotFoundException;
 import com.venzpro.domain.entity.User;
 import com.venzpro.domain.enums.UserRole;
 import com.venzpro.domain.repository.OrganizationRepository;
 import com.venzpro.domain.repository.UserRepository;
-import com.venzpro.exception.BusinessException;
-import com.venzpro.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -18,20 +18,6 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.UUID;
 
-/**
- * Serviço de convite de novos usuários para uma organização.
- *
- * Fluxo de múltiplos usuários por organização:
- *
- * 1. ADMIN chama POST /api/users/invite com { nome, email, role }
- * 2. Sistema cria o User com senha temporária aleatória
- * 3. [TODO] Envio de e-mail com link de definição de senha
- * 4. Usuário convidado acessa o link, define sua senha
- * 5. Login normal com JWT — organizationId do token isola seus dados
- *
- * Todos os usuários criados herdam o organizationId do ADMIN que convida.
- * É impossível criar um usuário em outra organização.
- */
 @Service
 @RequiredArgsConstructor
 public class InviteService {
@@ -42,7 +28,7 @@ public class InviteService {
 
     @Transactional
     public UserResponse invite(InviteRequest req) {
-        UUID orgId = TenantContext.get();   // organização do ADMIN que está convidando
+        UUID orgId = TenantContext.get();
 
         if (userRepository.existsByEmail(req.email())) {
             throw new BusinessException("Email já cadastrado: " + req.email());
@@ -51,7 +37,6 @@ public class InviteService {
         var org = organizationRepository.findById(orgId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organização", orgId));
 
-        // Senha temporária — usuário deverá redefinir no primeiro acesso
         String tempPassword = generateSecureToken(12);
 
         var user = User.builder()
@@ -60,13 +45,10 @@ public class InviteService {
                 .senha(passwordEncoder.encode(tempPassword))
                 .role(req.role() != null ? req.role() : UserRole.VENDEDOR)
                 .organization(org)
-                .mustChangePassword(true)   // flag para forçar troca na próxima sessão
+                .mustChangePassword(true)
                 .build();
 
         user = userRepository.save(user);
-
-        // TODO: enviar e-mail com link de ativação contendo token de redefinição
-        // emailService.sendInvite(user.getEmail(), tempPassword, org.getNome());
 
         return UserResponse.from(user);
     }

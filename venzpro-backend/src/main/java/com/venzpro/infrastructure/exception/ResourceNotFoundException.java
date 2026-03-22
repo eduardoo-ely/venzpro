@@ -1,4 +1,4 @@
-package com.venzpro.exception;
+package com.venzpro.infrastructure.exception;
 
 /**
  * Lançada quando um recurso não é encontrado OU quando pertence a outra organização.

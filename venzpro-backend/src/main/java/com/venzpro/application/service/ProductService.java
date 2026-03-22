@@ -3,13 +3,13 @@ package com.venzpro.application.service;
 import com.venzpro.application.dto.request.PatchPriceRequest;
 import com.venzpro.application.dto.request.ProductRequest;
 import com.venzpro.application.dto.response.ProductResponse;
-import com.venzpro.config.security.TenantContext;
+import com.venzpro.infrastructure.security.TenantContext;
+import com.venzpro.infrastructure.exception.BusinessException;
+import com.venzpro.infrastructure.exception.ResourceNotFoundException;
 import com.venzpro.domain.entity.Product;
 import com.venzpro.domain.repository.CompanyRepository;
 import com.venzpro.domain.repository.OrganizationRepository;
 import com.venzpro.domain.repository.ProductRepository;
-import com.venzpro.exception.BusinessException;
-import com.venzpro.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -19,12 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
-/**
- * Serviço de produtos — CRUD com paginação e isolamento multi-tenant.
- *
- * O organizationId NUNCA vem do request body ou da URL.
- * É sempre extraído do TenantContext (preenchido pelo JWT filter).
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -34,19 +28,16 @@ public class ProductService {
     private final CompanyRepository      companyRepository;
     private final OrganizationRepository organizationRepository;
 
-    // ── CREATE ────────────────────────────────────────────────────────────────
-
     @Transactional
     public ProductResponse create(ProductRequest req) {
-        final UUID orgId = TenantContext.get(); // isolamento: vem do JWT
+        final UUID orgId = TenantContext.get();
 
         var org = organizationRepository.findById(orgId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organização", orgId));
 
-        // Empresa opcional: null = produto global da organização
         var company = req.companyId() != null
                 ? companyRepository.findByIdAndOrganizationId(req.companyId(), orgId)
-                .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()))
+                    .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()))
                 : null;
 
         var product = Product.builder()
@@ -57,15 +48,12 @@ public class ProductService {
                 .company(company)
                 .build();
 
-        // organizationId é imutável — definido uma vez aqui
         product.setOrganizationId(orgId);
 
         var saved = productRepository.save(product);
         log.info("Produto criado: {} na org: {}", saved.getId(), orgId);
         return ProductResponse.from(saved);
     }
-
-    // ── READ (com paginação) ──────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public Page<ProductResponse> findAll(Pageable pageable) {
@@ -78,10 +66,8 @@ public class ProductService {
     @Transactional(readOnly = true)
     public Page<ProductResponse> findByCompany(UUID companyId, Pageable pageable) {
         UUID orgId = TenantContext.get();
-        // valida que a empresa pertence à organização
         companyRepository.findByIdAndOrganizationId(companyId, orgId)
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa", companyId));
-
         return productRepository
                 .findAllByOrganizationIdAndCompanyIdAndAtivoTrue(orgId, companyId, pageable)
                 .map(ProductResponse::from);
@@ -102,8 +88,6 @@ public class ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("Produto", id));
     }
 
-    // ── UPDATE ────────────────────────────────────────────────────────────────
-
     @Transactional
     public ProductResponse update(UUID id, ProductRequest req) {
         UUID orgId = TenantContext.get();
@@ -113,23 +97,18 @@ public class ProductService {
 
         var company = req.companyId() != null
                 ? companyRepository.findByIdAndOrganizationId(req.companyId(), orgId)
-                .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()))
+                    .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()))
                 : null;
 
         product.setNome(req.nome());
         product.setDescricao(req.descricao());
         product.setUnidade(req.unidade());
         product.setCompany(company);
-        product.alterarPreco(req.precoBase()); // validação encapsulada na entidade
+        product.alterarPreco(req.precoBase());
 
         return ProductResponse.from(productRepository.save(product));
     }
 
-    /**
-     * Actualiza apenas o preço — endpoint restrito a ADMIN/GERENTE.
-     * Usa query JPQL directa para evitar carregar a entidade completa.
-     * Retorna o produto actualizado para o controller.
-     */
     @Transactional
     public ProductResponse patchPrice(UUID id, PatchPriceRequest req) {
         UUID orgId = TenantContext.get();
@@ -144,13 +123,10 @@ public class ProductService {
 
         log.info("Preço do produto {} alterado para {} na org {}", id, req.novoPreco(), orgId);
 
-        // Recarrega para retornar o estado actualizado
         return productRepository.findByIdAndOrganizationId(id, orgId)
                 .map(ProductResponse::from)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto", id));
     }
-
-    // ── DELETE (soft) ─────────────────────────────────────────────────────────
 
     @Transactional
     public void delete(UUID id) {
@@ -159,12 +135,10 @@ public class ProductService {
         var product = productRepository.findByIdAndOrganizationId(id, orgId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto", id));
 
-        product.desativar(); // soft-delete — mantém histórico em OrderItem
+        product.desativar();
         productRepository.save(product);
         log.info("Produto {} desativado (soft-delete) na org {}", id, orgId);
     }
-
-    // ── STATS ─────────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public long countAtivos() {

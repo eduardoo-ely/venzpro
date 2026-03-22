@@ -4,7 +4,7 @@ import com.venzpro.application.dto.request.EventRequest;
 import com.venzpro.application.dto.response.EventResponse;
 import com.venzpro.domain.entity.Event;
 import com.venzpro.domain.repository.*;
-import com.venzpro.exception.ResourceNotFoundException;
+import com.venzpro.infrastructure.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

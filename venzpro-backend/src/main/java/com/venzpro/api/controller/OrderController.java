@@ -3,7 +3,7 @@ package com.venzpro.api.controller;
 import com.venzpro.application.dto.request.OrderRequest;
 import com.venzpro.application.dto.response.OrderResponse;
 import com.venzpro.application.service.OrderService;
-import com.venzpro.config.security.VenzproPrincipal;
+import com.venzpro.infrastructure.security.VenzproPrincipal;
 import com.venzpro.domain.enums.OrderStatus;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

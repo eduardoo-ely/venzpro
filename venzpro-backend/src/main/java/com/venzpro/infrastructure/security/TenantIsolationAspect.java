@@ -26,14 +26,11 @@ public class TenantIsolationAspect {
 
             UUID entityOrgId = extractOrganizationId(arg);
 
-            // Permite a operação se não houver tenant logado (ex: fluxo de registro inicial)
             if (currentOrgId == null) {
                 return;
             }
 
             if (entityOrgId != null && !entityOrgId.equals(currentOrgId)) {
-
-                // Exceção de segurança: Permite salvar User ou Organization durante novo cadastro
                 String entityName = arg.getClass().getSimpleName();
                 if (entityName.equals("User") || entityName.equals("Organization")) {
                     return;

@@ -5,7 +5,7 @@ import com.venzpro.application.dto.response.CompanyResponse;
 import com.venzpro.domain.entity.Company;
 import com.venzpro.domain.repository.CompanyRepository;
 import com.venzpro.domain.repository.OrganizationRepository;
-import com.venzpro.exception.ResourceNotFoundException;
+import com.venzpro.infrastructure.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

@@ -2,7 +2,7 @@ package com.venzpro.application.service;
 
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
-import com.venzpro.config.security.TenantContext;
+import com.venzpro.infrastructure.security.TenantContext;
 import com.venzpro.domain.entity.Product;
 import com.venzpro.domain.enums.UnidadeMedida;
 import com.venzpro.domain.repository.ProductRepository;
@@ -34,19 +34,12 @@ public class ProductImportExportService {
     private final ProductRepository productRepository;
     private static final int BATCH_SIZE = 500;
 
-    /**
-     * Importação assíncrona de CSV usando OpenCSV.
-     * Lê o ficheiro em lotes (batch) para otimizar o uso da RAM e do PostgreSQL.
-     */
     @Async
     public void importProductsAsync(MultipartFile file) {
-        // Captura o tenant atual da thread principal (HTTP Request)
         final UUID organizationId = TenantContext.get();
 
         try {
-            // INJETA o tenant na nova Thread assíncrona para não falhar o TenantIsolationAspect
             TenantContext.set(organizationId);
-
             log.info("Iniciando importação de produtos para org: {}", organizationId);
 
             try (Reader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8);
@@ -57,9 +50,8 @@ public class ProductImportExportService {
                 int totalImported = 0;
 
                 while ((nextLine = csvReader.readNext()) != null) {
-                    if (nextLine.length < 3) continue; // ignora linhas incompletas
+                    if (nextLine.length < 3) continue;
 
-                    // Estrutura esperada do CSV: Nome, Descricao, Preco, Unidade, SKU
                     Product p = Product.builder()
                             .nome(nextLine[0].trim())
                             .descricao(nextLine[1].trim())
@@ -72,7 +64,6 @@ public class ProductImportExportService {
                     p.setOrganizationId(organizationId);
                     batch.add(p);
 
-                    // Salva em lotes de 500 para evitar OutOfMemoryError
                     if (batch.size() >= BATCH_SIZE) {
                         productRepository.saveAll(batch);
                         totalImported += batch.size();
@@ -80,7 +71,6 @@ public class ProductImportExportService {
                     }
                 }
 
-                // Salva o remanescente
                 if (!batch.isEmpty()) {
                     productRepository.saveAll(batch);
                     totalImported += batch.size();
@@ -90,16 +80,11 @@ public class ProductImportExportService {
             }
         } catch (Exception e) {
             log.error("Erro ao importar CSV para org {}: {}", organizationId, e.getMessage());
-            // Num sistema real, poderias gravar este erro numa tabela de "ImportJobs" para notificar o frontend
         } finally {
-            // Limpa o contexto da thread para evitar vazamentos de memória (Memory Leaks)
             TenantContext.clear();
         }
     }
 
-    /**
-     * Exporta todo o catálogo ativo da organização para um ficheiro Excel (XLSX).
-     */
     @Transactional(readOnly = true)
     public byte[] exportProductsToExcel() {
         UUID orgId = TenantContext.get();
@@ -108,7 +93,6 @@ public class ProductImportExportService {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Catálogo de Produtos");
 
-            // Cria o cabeçalho
             Row headerRow = sheet.createRow(0);
             headerRow.createCell(0).setCellValue("SKU");
             headerRow.createCell(1).setCellValue("Nome");
@@ -116,18 +100,16 @@ public class ProductImportExportService {
             headerRow.createCell(3).setCellValue("Preço Base");
             headerRow.createCell(4).setCellValue("Unidade");
 
-            // Preenche as linhas
             int rowIdx = 1;
             for (Product p : products) {
                 Row row = sheet.createRow(rowIdx++);
-                row.createCell(0).setCellValue(p.getCodigoSku() != null ? p.getCodigoSku() : "");
+                row.createCell(0).setCellValue(p.getCodigoSku() != null ? p.getCodigoSku().toString() : "");
                 row.createCell(1).setCellValue(p.getNome());
                 row.createCell(2).setCellValue(p.getDescricao() != null ? p.getDescricao() : "");
                 row.createCell(3).setCellValue(p.getPrecoBase().doubleValue());
                 row.createCell(4).setCellValue(p.getUnidade().name());
             }
 
-            // Auto-size das colunas
             for (int i = 0; i < 5; i++) {
                 sheet.autoSizeColumn(i);
             }

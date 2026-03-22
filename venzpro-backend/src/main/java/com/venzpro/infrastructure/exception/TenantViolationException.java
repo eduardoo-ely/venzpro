@@ -1,4 +1,4 @@
-package com.venzpro.exception;
+package com.venzpro.infrastructure.exception;
 
 /**
  * Lançada quando uma operação viola o isolamento multi-tenant.

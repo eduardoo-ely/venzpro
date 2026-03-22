@@ -1,4 +1,4 @@
-package com.venzpro.exception;
+package com.venzpro.infrastructure.exception;
 
 /**
  * Lançada quando uma regra de negócio é violada (ex: email duplicado).
