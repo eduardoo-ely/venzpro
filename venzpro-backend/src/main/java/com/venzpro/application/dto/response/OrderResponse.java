@@ -6,16 +6,22 @@ import com.venzpro.domain.enums.OrderStatus;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public record OrderResponse(
     UUID id,
-    UUID customerId, String clienteNome,
-    UUID companyId,  String empresaNome,
-    UUID userId,     String vendedorNome,
+    UUID customerId,
+    String clienteNome,
+    UUID companyId,
+    String empresaNome,
+    UUID userId,
+    String vendedorNome,
     UUID organizationId,
-    BigDecimal valorTotal, OrderStatus status,
+    BigDecimal valorTotal,
+    OrderStatus status,
     String descricao,
+    List<OrderItemResponse> items,
     UUID canceladoPor,
     OffsetDateTime canceladoEm,
     String motivoCancelamento,
@@ -24,11 +30,17 @@ public record OrderResponse(
     public static OrderResponse from(Order o) {
         return new OrderResponse(
             o.getId(),
-            o.getCustomer().getId(), o.getCustomer().getNome(),
-            o.getCompany().getId(),  o.getCompany().getNome(),
-            o.getUser().getId(),     o.getUser().getNome(),
+            o.getCustomer().getId(),
+            o.getCustomer().getNome(),
+            o.getCompany().getId(),
+            o.getCompany().getNome(),
+            o.getUser().getId(),
+            o.getUser().getNome(),
             o.getOrganization().getId(),
-            o.getValorTotal(), o.getStatus(), o.getDescricao(),
+            o.getValorTotal(),
+            o.getStatus(),
+            o.getDescricao(),
+            o.getItens().stream().map(OrderItemResponse::from).toList(),
             o.getCanceladoPor() != null ? o.getCanceladoPor().getId() : null,
             o.getCanceladoEm(),
             o.getMotivoCancelamento(),

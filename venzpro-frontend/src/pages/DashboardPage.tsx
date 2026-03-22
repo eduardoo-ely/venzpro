@@ -19,12 +19,18 @@ import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recha
 const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const STATUS_CLASSES: Record<string, string> = {
   ORCAMENTO: 'status-orcamento',
-  FECHADO:   'status-fechado',
+  ENVIADO:   'status-enviado',
+  APROVADO:  'status-aprovado',
+  REJEITADO: 'status-rejeitado',
+  CONCLUIDO: 'status-concluido',
   CANCELADO: 'status-cancelado',
 };
 const STATUS_LABELS: Record<string, string> = {
   ORCAMENTO: 'Orçamento',
-  FECHADO:   'Fechado',
+  ENVIADO:   'Enviado',
+  APROVADO:  'Aprovado',
+  REJEITADO: 'Rejeitado',
+  CONCLUIDO: 'Concluído',
   CANCELADO: 'Cancelado',
 };
 
@@ -74,7 +80,7 @@ export default function DashboardPage() {
     { title: 'Clientes',      value: customers.length,                                         icon: Users,       spark: customerSpark, color: 'hsl(239 84% 67%)' },
     { title: 'Pedidos',       value: orders.length,                                            icon: Package,     spark: orderSpark,    color: 'hsl(258 90% 66%)' },
     { title: 'Em Aberto',     value: orders.filter(o => o.status === 'ORCAMENTO').length,      icon: FileText,    spark: [],            color: 'hsl(38 92% 50%)' },
-    { title: 'Fechados',      value: orders.filter(o => o.status === 'FECHADO').length,        icon: CheckCircle, spark: [],            color: 'hsl(160 84% 39%)' },
+    { title: 'Aprovados',    value: orders.filter(o => o.status === 'APROVADO').length,      icon: CheckCircle, spark: [],            color: 'hsl(160 84% 39%)' },
   ];
 
   const lastOrders      = [...orders].sort((a,b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()).slice(0, 5);

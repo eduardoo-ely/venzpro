@@ -38,11 +38,23 @@ public class Order {
     private Organization organization;
 
     @Column(name = "valor_total", precision = 15, scale = 2)
-    private BigDecimal valorTotal;
+    @Builder.Default
+    private BigDecimal valorTotal = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private OrderStatus status;
+    @Builder.Default
+    private OrderStatus status = OrderStatus.ORCAMENTO;
+
+    @Column(name = "motivo_cancelamento", columnDefinition = "TEXT")
+    private String motivoCancelamento;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cancelado_por")
+    private User canceladoPor;
+
+    @Column(name = "cancelado_em")
+    private OffsetDateTime canceladoEm;
 
     @Column(name = "motivo_cancelamento", columnDefinition = "TEXT")
     private String motivoCancelamento;
@@ -64,4 +76,22 @@ public class Order {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    public void addItem(OrderItem item) {
+        itens.add(item);
+        item.setOrder(this);
+    }
+
+    public void clearItens() {
+        for (OrderItem item : itens) {
+            item.setOrder(null);
+        }
+        itens.clear();
+    }
+
+    public void recalcularTotal() {
+        this.valorTotal = itens.stream()
+                .map(item -> item.getPrecoUnitario().multiply(item.getQuantidade()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 }
