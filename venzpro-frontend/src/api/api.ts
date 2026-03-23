@@ -1,7 +1,21 @@
 import axios from 'axios';
 
+const resolveApiBaseUrl = () => {
+  const configuredUrl = import.meta.env.VITE_API_URL?.trim();
+
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+
+  if (typeof window !== 'undefined' && window.location.port === '3000') {
+    return '/api';
+  }
+
+  return 'http://localhost:8080/api';
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api',
+  baseURL: resolveApiBaseUrl(),
 });
 
 // Interceptor: Injeta o Token

@@ -10,7 +10,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:validate}
     show-sql: ${SPRING_JPA_SHOW_SQL:false}
     open-in-view: false
     properties:
@@ -50,6 +50,10 @@ server:
   error:
     include-message: never
     include-stacktrace: never
+
+app:
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
 
 jwt:
   secret: ${JWT_SECRET:venzpro-dev-secret-key-nao-usar-em-producao-256bits-minimo}
