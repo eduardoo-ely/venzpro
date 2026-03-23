@@ -5,6 +5,8 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/AppLayout';
 import { queryClient } from '@/lib/queryClient';
+import { useEffect } from "react";
+import { api } from "./api/api";
 
 import LoginPage         from '@/pages/LoginPage';
 import RegisterPage      from '@/pages/RegisterPage';
@@ -46,5 +48,7 @@ const App = () => (
       </AuthProvider>
     </QueryClientProvider>
 );
+
+
 
 export default App;

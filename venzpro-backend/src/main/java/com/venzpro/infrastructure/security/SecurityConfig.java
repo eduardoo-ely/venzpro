@@ -35,7 +35,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
-    private final UserRepository userRepository;
+    private final UserRepository          userRepository;
 
     @Value("${app.cors.allowed-origins:http://localhost:3000,http://127.0.0.1:3000}")
     private List<String> allowedOrigins;
@@ -47,21 +47,17 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // ── Rotas públicas ─────────────────────────────────
-                        .requestMatchers("/api/auth/**").permitAll()
 
-                        // ── Health check (Docker) ───────────────────────────
+                        // ── Rotas públicas ────────────────────────────────
+                        .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
 
-                        // ── Organização: só ADMIN pode criar/editar/deletar ─
-                        .requestMatchers(HttpMethod.GET, "/api/organizations/**").authenticated()
-                        .requestMatchers("/api/organizations/**").hasRole("ADMIN")
-
-                        // ── Usuários: ADMIN gerencia a equipe ──────────────
+                        // ── Usuários: leitura para qualquer autenticado ───
+                        // (criação/deleção protegida por @PreAuthorize no controller)
                         .requestMatchers(HttpMethod.GET, "/api/users/**").authenticated()
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
 
-                        // ── Demais recursos: qualquer usuário autenticado ───
+                        // ── Demais recursos: qualquer usuário autenticado ─
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
@@ -87,7 +83,9 @@ public class SecurityConfig {
     @Bean
     public UserDetailsService userDetailsService() {
         return email -> userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado: " + email));
+                .orElseThrow(() -> new UsernameNotFoundException(
+                    "Usuário não encontrado: " + email
+                ));
     }
 
     @Bean
@@ -99,7 +97,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
+            throws Exception {
         return config.getAuthenticationManager();
     }
 

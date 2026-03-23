@@ -8,12 +8,24 @@ import type {
 
 export interface LoginPayload    { email: string; senha: string }
 export interface RegisterPayload {
-  nome: string; email: string; senha: string;
-  nomeOrganizacao: string; tipoOrganizacao: 'REPRESENTANTE' | 'EMPRESA';
+  nome: string;
+  email: string;
+  senha: string;
+  nomeOrganizacao: string;
+  tipoOrganizacao: 'REPRESENTANTE' | 'EMPRESA';
 }
 export interface AuthResponse {
   token: string;
-  user: { id: string; nome: string; email: string; role: string };
+  user: {
+    id: string;
+    nome: string;
+    email: string;
+    role: string;
+    organizationId: string;
+    podeAprovar?: boolean;
+    podeExportar?: boolean;
+    podeVerDashboard?: boolean;
+  };
   organization: { id: string; nome: string; tipo: string };
 }
 
@@ -31,12 +43,12 @@ export interface UpdateAccessPayload {
   podeVerDashboard: boolean;
 }
 
-
 export const usersApi = {
-  list:         () => api.get<User[]>('/users').then(r => r.data),
-  get:          (id: string) => api.get<User>(`/users/${id}`).then(r => r.data),
-  updateAccess: (id: string, d: UpdateAccessPayload) => api.patch<User>(`/users/${id}/access`, d).then(r => r.data),
-  remove:       (id: string) => api.delete(`/users/${id}`).then(r => r.data),
+  list:         ()                                         => api.get<User[]>('/users').then(r => r.data),
+  me:           ()                                         => api.get<User>('/users/me').then(r => r.data),
+  get:          (id: string)                               => api.get<User>(`/users/${id}`).then(r => r.data),
+  updateAccess: (id: string, d: UpdateAccessPayload)       => api.patch<User>(`/users/${id}/access`, d).then(r => r.data),
+  remove:       (id: string)                               => api.delete(`/users/${id}`).then(r => r.data),
 };
 
 // ── Companies ─────────────────────────────────────────────────────────────────
@@ -52,7 +64,7 @@ export const companiesApi = {
 // ── Customers ─────────────────────────────────────────────────────────────────
 
 export type CustomerPayload = Pick<Customer, 'nome'> &
-    Partial<Pick<Customer, 'telefone' | 'email' | 'cidade' | 'cpfCnpj' | 'status'>>;
+  Partial<Pick<Customer, 'telefone' | 'email' | 'cidade' | 'cpfCnpj' | 'status'>>;
 
 export interface CustomerStatusPayload {
   status: CustomerStatus;
@@ -64,15 +76,13 @@ export interface CustomerOwnerPayload {
 }
 
 export const customersApi = {
-  list:         ()                               => api.get<Customer[]>('/customers').then(r => r.data),
-  get:          (id: string)                     => api.get<Customer>(`/customers/${id}`).then(r => r.data),
-  create:       (d: CustomerPayload)             => api.post<Customer>('/customers', d).then(r => r.data),
-  update:       (id: string, d: CustomerPayload) => api.put<Customer>(`/customers/${id}`, d).then(r => r.data),
-  updateStatus: (id: string, d: CustomerStatusPayload) =>
-      api.patch<Customer>(`/customers/${id}/status`, d).then(r => r.data),
-  updateOwner:  (id: string, d: CustomerOwnerPayload) =>
-      api.patch<Customer>(`/customers/${id}/owner`, d).then(r => r.data),
-  remove:       (id: string) => api.delete(`/customers/${id}`).then(r => r.data),
+  list:         ()                                          => api.get<Customer[]>('/customers').then(r => r.data),
+  get:          (id: string)                                => api.get<Customer>(`/customers/${id}`).then(r => r.data),
+  create:       (d: CustomerPayload)                        => api.post<Customer>('/customers', d).then(r => r.data),
+  update:       (id: string, d: CustomerPayload)            => api.put<Customer>(`/customers/${id}`, d).then(r => r.data),
+  updateStatus: (id: string, d: CustomerStatusPayload)      => api.patch<Customer>(`/customers/${id}/status`, d).then(r => r.data),
+  updateOwner:  (id: string, d: CustomerOwnerPayload)       => api.patch<Customer>(`/customers/${id}/owner`, d).then(r => r.data),
+  remove:       (id: string)                                => api.delete(`/customers/${id}`).then(r => r.data),
 };
 
 // ── Orders ────────────────────────────────────────────────────────────────────
@@ -104,30 +114,28 @@ export interface ProductPayload {
 }
 
 export interface PageResponse<T> {
-  content:          T[];
-  totalElements:    number;
-  totalPages:       number;
-  number:           number;
-  size:             number;
+  content:       T[];
+  totalElements: number;
+  totalPages:    number;
+  number:        number;
+  size:          number;
 }
 
 export const productsApi = {
-  // ── Listagem paginada ──────────────────────────────────────────────────────
   list: (page = 0, size = 20) =>
       api.get<PageResponse<Product>>('/products', {
         params: { page, size, sort: 'nome,asc' },
       }).then(r => r.data),
 
-  // ── Busca full-text paginada ───────────────────────────────────────────────
   search: (termo: string, page = 0, size = 20) =>
       api.get<PageResponse<Product>>('/products/search', {
         params: { termo, page, size, sort: 'nome,asc' },
       }).then(r => r.data),
 
-  // ── CRUD ──────────────────────────────────────────────────────────────────
-  get:    (id: string) =>
+  get: (id: string) =>
       api.get<Product>(`/products/${id}`).then(r => r.data),
 
+  // POST /api/products — endpoint adicionado no ProductController
   create: (d: ProductPayload) =>
       api.post<Product>('/products', d).then(r => r.data),
 
@@ -140,8 +148,6 @@ export const productsApi = {
   remove: (id: string) =>
       api.delete(`/products/${id}`).then(r => r.data),
 
-  // ── Importação CSV ────────────────────────────────────────────────────────
-
   importCsv: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -150,7 +156,6 @@ export const productsApi = {
     }).then(r => r.data);
   },
 
-  // ── Exportação Excel ──────────────────────────────────────────────────────
   exportExcel: () =>
       api.get<Blob>('/products/export', { responseType: 'blob' }).then(r => r.data),
 };
@@ -170,11 +175,11 @@ export interface EventPayload {
 }
 
 export const eventsApi = {
-  list:   ()                            => api.get<Event[]>('/events').then(r => r.data),
-  get:    (id: string)                  => api.get<Event>(`/events/${id}`).then(r => r.data),
-  create: (d: EventPayload)             => api.post<Event>('/events', d).then(r => r.data),
-  update: (id: string, d: EventPayload) => api.put<Event>(`/events/${id}`, d).then(r => r.data),
-  remove: (id: string)                  => api.delete(`/events/${id}`).then(r => r.data),
+  list:   ()                             => api.get<Event[]>('/events').then(r => r.data),
+  get:    (id: string)                   => api.get<Event>(`/events/${id}`).then(r => r.data),
+  create: (d: EventPayload)              => api.post<Event>('/events', d).then(r => r.data),
+  update: (id: string, d: EventPayload)  => api.put<Event>(`/events/${id}`, d).then(r => r.data),
+  remove: (id: string)                   => api.delete(`/events/${id}`).then(r => r.data),
 };
 
 // ── Files ─────────────────────────────────────────────────────────────────────
@@ -192,6 +197,18 @@ export const filesApi = {
   get:           (id: string)        => api.get<CatalogFile>(`/files/${id}`).then(r => r.data),
   create:        (d: FilePayload)    => api.post<CatalogFile>('/files', d).then(r => r.data),
   remove:        (id: string)        => api.delete(`/files/${id}`).then(r => r.data),
+};
+
+// ── Invites ───────────────────────────────────────────────────────────────────
+
+export interface InvitePayload {
+  nome:  string;
+  email: string;
+  role?: string;
+}
+
+export const invitesApi = {
+  invite: (d: InvitePayload) => api.post<User>('/invites', d).then(r => r.data),
 };
 
 // ── Organizations ─────────────────────────────────────────────────────────────

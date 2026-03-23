@@ -1,5 +1,6 @@
 package com.venzpro.application.dto.response;
 
+import com.venzpro.domain.entity.User;
 import com.venzpro.domain.enums.OrganizationType;
 import com.venzpro.domain.enums.UserRole;
 
@@ -10,8 +11,7 @@ import com.venzpro.domain.enums.UserRole;
  *  1. Armazenar o JWT no localStorage e enviar em requests
  *  2. Popular o AuthContext (user + organization)
  *  3. Redirecionar para a tela correta baseado no role
- *
- * Estrutura espelhada no AuthContext.tsx do frontend.
+ *  4. Aplicar permissões granulares (podeAprovar, podeExportar, podeVerDashboard)
  */
 public record AuthResponse(
 
@@ -27,22 +27,39 @@ public record AuthResponse(
 ) {
 
     /**
-     * Dados do usuário — espelha a interface User do types/index.ts
+     * Dados completos do usuário, incluindo permissões granulares.
      */
     public record UserData(
-        String id,
-        String nome,
-        String email,
+        String   id,
+        String   nome,
+        String   email,
         UserRole role,
-        String organizationId
-    ) {}
+        String   organizationId,
+        boolean  podeAprovar,
+        boolean  podeExportar,
+        boolean  podeVerDashboard
+    ) {
+        /** Factory a partir da entidade User */
+        public static UserData from(User user) {
+            return new UserData(
+                    user.getId().toString(),
+                    user.getNome(),
+                    user.getEmail(),
+                    user.getRole(),
+                    user.getOrganization().getId().toString(),
+                    user.isPodeAprovar(),
+                    user.isPodeExportar(),
+                    user.isPodeVerDashboard()
+            );
+        }
+    }
 
     /**
-     * Dados da organização — espelha a interface Organization do types/index.ts
+     * Dados da organização.
      */
     public record OrganizationData(
-        String id,
-        String nome,
+        String           id,
+        String           nome,
         OrganizationType tipo
     ) {}
 }

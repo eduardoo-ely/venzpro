@@ -1,288 +1,359 @@
-import React, { useState, useMemo } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { useCustomers } from "@/hooks/useCustomers";
-import { useCompanies } from "@/hooks/useCompanies";
-import { useProducts } from "@/hooks/useProducts";
-import { useOrders } from "@/hooks/useOrders";
-import { Product } from "@/types";
-import { Search, ShoppingCart, Plus, Minus, Trash2, Loader2, PackageOpen } from "lucide-react";
-import { toast } from "sonner";
+import React, { useState, useMemo } from 'react';
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+} from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useCustomers } from '@/hooks/useCustomers';
+import { useCompanies } from '@/hooks/useCompanies';
+import { useProducts } from '@/hooks/useProducts';
+import { useOrders } from '@/hooks/useOrders';
+import type { Product } from '@/types';
+import {
+  Search, ShoppingCart, Plus, Minus, Trash2, Loader2, PackageOpen,
+} from 'lucide-react';
+import { toast } from 'sonner';
 
 interface NovoPedidoSheetProps {
-    isOpen: boolean;
-    onClose: () => void;
+  isOpen:  boolean;
+  onClose: () => void;
 }
 
 interface CartItem {
-    product: Product;
-    quantidade: number;
+  product:    Product;
+  quantidade: number;
 }
 
+const formatCurrency = (val: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
 export function NovoPedidoSheet({ isOpen, onClose }: NovoPedidoSheetProps) {
-    // Hooks da API Real
-    const { customers, isLoading: isLoadingCustomers } = useCustomers();
-    const { companies, isLoading: isLoadingCompanies } = useCompanies();
-    const { products, isLoading: isLoadingProducts } = useProducts();
-    const { createOrder } = useOrders();
+  const { customers,  isLoading: isLoadingCustomers  } = useCustomers();
+  const { companies,  isLoading: isLoadingCompanies  } = useCompanies();
+  const { products,   isLoading: isLoadingProducts   } = useProducts();
+  const { createOrder } = useOrders();
 
-    // Estados do Formulário
-    const [customerId, setCustomerId] = useState<string>("");
-    const [companyId, setCompanyId] = useState<string>("");
-    const [descricao, setDescricao] = useState<string>("");
-    const [searchTerm, setSearchTerm] = useState<string>("");
+  const [customerId, setCustomerId] = useState('');
+  const [companyId,  setCompanyId]  = useState('');
+  const [descricao,  setDescricao]  = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [cart,       setCart]       = useState<CartItem[]>([]);
 
-    // Estado do Carrinho
-    const [cart, setCart] = useState<CartItem[]>([]);
+  // Apenas clientes APROVADOS com owner atribuído — regra de negócio §12
+  const clientesAptos = useMemo(
+    () => (customers ?? []).filter(c => c.status === 'APROVADO' && c.ownerId),
+    [customers]
+  );
 
-    // Filtra apenas clientes APROVADOS (Regra de Negócio §12.6.1)
-    const clientesAprovados = useMemo(() => {
-        return customers?.filter(c => c.status === "APROVADO") || [];
-    }, [customers]);
+  // products já é array (useProducts retorna products: Product[])
+  const filteredProducts = useMemo(() => {
+    if (!searchTerm.trim()) return products;
+    const lower = searchTerm.toLowerCase();
+    return products.filter(
+      p =>
+        p.nome.toLowerCase().includes(lower) ||
+        p.codigoSku?.toLowerCase().includes(lower)
+    );
+  }, [searchTerm, products]);
 
-    // Lista de Produtos recebida da API (lidando com a paginação se existir)
-    // O seu backend devolve { content: [...] } se for paginado, ajustamos aqui:
-    const listaProdutos: Product[] = Array.isArray(products) ? products : (products as any)?.content || [];
+  // ── Carrinho ──────────────────────────────────────────────────────────────
 
-    const filteredProducts = useMemo(() => {
-        if (!searchTerm) return listaProdutos;
-        return listaProdutos.filter(p =>
-            p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.codigoSku?.toLowerCase().includes(searchTerm.toLowerCase())
+  const addToCart = (product: Product) => {
+    if (!product.precoBase) {
+      toast.error('Este produto não tem preço definido.');
+      return;
+    }
+    setCart(prev => {
+      const exists = prev.find(i => i.product.id === product.id);
+      if (exists) {
+        return prev.map(i =>
+          i.product.id === product.id ? { ...i, quantidade: i.quantidade + 1 } : i
         );
-    }, [searchTerm, listaProdutos]);
+      }
+      return [...prev, { product, quantidade: 1 }];
+    });
+  };
 
-    // Funções do Carrinho
-    const addToCart = (product: Product) => {
-        if (!product.precoBase) {
-            toast.error("Este produto não tem preço definido.");
-            return;
-        }
-        setCart(prev => {
-            const exists = prev.find(item => item.product.id === product.id);
-            if (exists) {
-                return prev.map(item => item.product.id === product.id ? { ...item, quantidade: item.quantidade + 1 } : item);
-            }
-            return [...prev, { product, quantidade: 1 }];
-        });
-    };
+  const updateQuantity = (productId: string, delta: number) => {
+    setCart(prev =>
+      prev
+        .map(i =>
+          i.product.id === productId
+            ? { ...i, quantidade: Math.max(0, i.quantidade + delta) }
+            : i
+        )
+        .filter(i => i.quantidade > 0)
+    );
+  };
 
-    const updateQuantity = (productId: string, delta: number) => {
-        setCart(prev => prev.map(item => {
-            if (item.product.id === productId) {
-                const novaQtd = Math.max(0, item.quantidade + delta);
-                return { ...item, quantidade: novaQtd };
-            }
-            return item;
-        }).filter(item => item.quantidade > 0));
-    };
+  const resetForm = () => {
+    setCart([]);
+    setCustomerId('');
+    setCompanyId('');
+    setDescricao('');
+    setSearchTerm('');
+  };
 
-    const clearCart = () => {
-        setCart([]);
-        setCustomerId("");
-        setCompanyId("");
-        setDescricao("");
-        setSearchTerm("");
-    };
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
 
-    const handleClose = () => {
-        clearCart();
-        onClose();
-    };
+  // ── Total ─────────────────────────────────────────────────────────────────
 
-    // Cálculos
-    const valorTotal = cart.reduce((acc, item) => acc + (item.product.precoBase * item.quantidade), 0);
-    const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const valorTotal = cart.reduce(
+    (acc, item) => acc + (item.product.precoBase ?? 0) * item.quantidade,
+    0
+  );
 
-    // Submissão do Pedido
-    const handleSubmit = () => {
-        if (!customerId) return toast.error("Selecione um Cliente.");
-        if (!companyId) return toast.error("Selecione uma Empresa (Fornecedor).");
-        if (cart.length === 0) return toast.error("O carrinho está vazio.");
+  // ── Submissão ─────────────────────────────────────────────────────────────
 
-        const payload = {
-            customerId,
-            companyId,
-            descricao,
-            items: cart.map(item => ({
-                productId: item.product.id,
-                quantidade: item.quantidade
-            }))
-        };
+  const handleSubmit = () => {
+    if (!customerId) { toast.error('Selecione um Cliente.');              return; }
+    if (!companyId)  { toast.error('Selecione uma Empresa Fornecedora.'); return; }
+    if (cart.length === 0) { toast.error('O carrinho está vazio.');       return; }
 
-        createOrder.mutate(payload as any, {
-            onSuccess: () => {
-                toast.success("Orçamento gerado com sucesso!");
-                handleClose();
-            }
-        });
-    };
+    createOrder.mutate(
+      {
+        customerId,
+        companyId,
+        descricao: descricao || undefined,
+        items: cart.map(i => ({
+          productId:  i.product.id,
+          quantidade: i.quantidade,
+        })),
+      },
+      {
+        onSuccess: () => {
+          toast.success('Orçamento gerado com sucesso!');
+          handleClose();
+        },
+      }
+    );
+  };
 
-    return (
-        <Sheet open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-            <SheetContent className="w-full sm:max-w-4xl p-0 flex flex-col h-full bg-gray-50">
+  return (
+    <Sheet open={isOpen} onOpenChange={open => !open && handleClose()}>
+      <SheetContent className="w-full sm:max-w-4xl p-0 flex flex-col h-full bg-card">
+        <SheetHeader className="p-6 border-b border-border/50 shrink-0">
+          <SheetTitle className="text-xl flex items-center gap-2">
+            <ShoppingCart className="h-5 w-5 text-primary" />
+            Ponto de Venda — Novo Orçamento
+          </SheetTitle>
+          <SheetDescription>
+            Selecione o cliente, adicione os produtos e gere o orçamento.
+          </SheetDescription>
+        </SheetHeader>
 
-                <SheetHeader className="p-6 bg-white border-b shrink-0">
-                    <SheetTitle className="text-2xl flex items-center gap-2">
-                        <ShoppingCart className="h-6 w-6 text-blue-600" />
-                        Ponto de Venda (Novo Orçamento)
-                    </SheetTitle>
-                    <SheetDescription>
-                        Selecione o cliente, adicione os produtos e gere o orçamento na hora.
-                    </SheetDescription>
-                </SheetHeader>
+        <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
 
-                {/* Layout Dividido (2 Colunas) */}
-                <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
+          {/* Coluna esquerda: seleção + catálogo */}
+          <div className="flex-1 flex flex-col border-r border-border/30">
 
-                    {/* Coluna Esquerda: Catálogo e Seleção */}
-                    <div className="flex-1 flex flex-col border-r bg-white w-full">
-                        <div className="p-6 space-y-4 shrink-0 border-b">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Cliente <span className="text-red-500">*</span></Label>
-                                    <Select value={customerId} onValueChange={setCustomerId}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder={isLoadingCustomers ? "A carregar..." : "Selecione o cliente"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {clientesAprovados.map(c => (
-                                                <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
-                                            ))}
-                                            {clientesAprovados.length === 0 && <SelectItem value="vazio" disabled>Nenhum cliente aprovado</SelectItem>}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Empresa Fornecedora <span className="text-red-500">*</span></Label>
-                                    <Select value={companyId} onValueChange={setCompanyId}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder={isLoadingCompanies ? "A carregar..." : "Selecione a empresa"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {companies?.map(c => (
-                                                <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-
-                            <div className="relative">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-                                <Input
-                                    placeholder="Pesquisar produtos no catálogo..."
-                                    className="pl-9 bg-gray-50"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
-                            </div>
-                        </div>
-
-                        <ScrollArea className="flex-1 p-6">
-                            {isLoadingProducts ? (
-                                <div className="flex items-center justify-center h-32 text-gray-500"><Loader2 className="h-6 w-6 animate-spin mr-2"/> A carregar catálogo...</div>
-                            ) : filteredProducts.length === 0 ? (
-                                <div className="text-center py-10 text-gray-500">
-                                    <PackageOpen className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                                    Nenhum produto encontrado.
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {filteredProducts.map(produto => (
-                                        <div key={produto.id} className="border rounded-lg p-4 flex flex-col justify-between bg-white hover:border-blue-400 transition-colors shadow-sm">
-                                            <div>
-                                                <div className="text-xs text-gray-500 font-medium mb-1">SKU: {produto.codigoSku || "S/N"}</div>
-                                                <h4 className="font-semibold text-gray-900 leading-tight">{produto.nome}</h4>
-                                                <div className="text-lg font-bold text-blue-600 mt-2">{formatCurrency(produto.precoBase || 0)}</div>
-                                            </div>
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                className="w-full mt-4 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                                                onClick={() => addToCart(produto)}
-                                            >
-                                                Adicionar
-                                            </Button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </ScrollArea>
-                    </div>
-
-                    {/* Coluna Direita: O Carrinho */}
-                    <div className="w-full md:w-96 flex flex-col bg-gray-50">
-                        <div className="p-4 bg-gray-100 border-b font-semibold text-gray-700 flex justify-between items-center shrink-0">
-                            Resumo do Pedido
-                            <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">{cart.length} itens</span>
-                        </div>
-
-                        <ScrollArea className="flex-1 p-4">
-                            {cart.length === 0 ? (
-                                <div className="text-center py-10 text-gray-400 flex flex-col items-center">
-                                    <ShoppingCart className="h-12 w-12 mb-2 opacity-20" />
-                                    <p>O seu carrinho está vazio.</p>
-                                    <p className="text-sm mt-1">Clique nos produtos para adicionar.</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {cart.map(item => (
-                                        <div key={item.product.id} className="bg-white p-3 rounded-lg border shadow-sm flex items-center justify-between">
-                                            <div className="flex-1 pr-2">
-                                                <h5 className="font-medium text-sm leading-tight text-gray-900 line-clamp-2">{item.product.nome}</h5>
-                                                <div className="text-blue-600 font-semibold text-sm mt-1">{formatCurrency(item.product.precoBase)}</div>
-                                            </div>
-                                            <div className="flex items-center gap-2 bg-gray-50 rounded-md border p-1">
-                                                <Button variant="ghost" size="icon" className="h-6 w-6 rounded-sm" onClick={() => updateQuantity(item.product.id, -1)}>
-                                                    {item.quantidade === 1 ? <Trash2 className="h-3 w-3 text-red-500" /> : <Minus className="h-3 w-3" />}
-                                                </Button>
-                                                <span className="text-sm font-semibold w-4 text-center">{item.quantidade}</span>
-                                                <Button variant="ghost" size="icon" className="h-6 w-6 rounded-sm" onClick={() => updateQuantity(item.product.id, 1)}>
-                                                    <Plus className="h-3 w-3" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {cart.length > 0 && (
-                                <div className="mt-6 space-y-2">
-                                    <Label className="text-gray-500 text-xs uppercase font-bold">Observações Internas (Opcional)</Label>
-                                    <Input
-                                        placeholder="Ex: Entrega urgente..."
-                                        className="bg-white text-sm"
-                                        value={descricao}
-                                        onChange={(e) => setDescricao(e.target.value)}
-                                    />
-                                </div>
-                            )}
-                        </ScrollArea>
-
-                        {/* Rodapé do Carrinho (Total e Submeter) */}
-                        <div className="p-6 bg-white border-t shrink-0">
-                            <div className="flex justify-between items-center mb-4">
-                                <span className="text-gray-600 font-medium">Valor Total:</span>
-                                <span className="text-2xl font-bold text-gray-900">{formatCurrency(valorTotal)}</span>
-                            </div>
-                            <Button
-                                className="w-full h-12 text-lg font-semibold shadow-md"
-                                onClick={handleSubmit}
-                                disabled={cart.length === 0 || createOrder.isPending}
-                            >
-                                {createOrder.isPending ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <ShoppingCart className="h-5 w-5 mr-2" />}
-                                Gerar Orçamento
-                            </Button>
-                        </div>
-                    </div>
+            {/* Cabeçalho da coluna */}
+            <div className="p-5 space-y-4 shrink-0 border-b border-border/30">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>
+                    Cliente <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={customerId} onValueChange={setCustomerId}>
+                    <SelectTrigger className="bg-muted border-border/50">
+                      <SelectValue
+                        placeholder={
+                          isLoadingCustomers ? 'Carregando...' : 'Selecione o cliente'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clientesAptos.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                      ))}
+                      {clientesAptos.length === 0 && (
+                        <SelectItem value="__vazio__" disabled>
+                          Nenhum cliente aprovado com responsável
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-            </SheetContent>
-        </Sheet>
-    );
+                <div className="space-y-2">
+                  <Label>
+                    Empresa Fornecedora <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={companyId} onValueChange={setCompanyId}>
+                    <SelectTrigger className="bg-muted border-border/50">
+                      <SelectValue
+                        placeholder={
+                          isLoadingCompanies ? 'Carregando...' : 'Selecione a empresa'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(companies ?? []).map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Pesquisar produtos no catálogo..."
+                  className="pl-9 bg-muted border-border/50"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Grid de produtos */}
+            <ScrollArea className="flex-1 p-5">
+              {isLoadingProducts ? (
+                <div className="flex items-center justify-center h-32 text-muted-foreground">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando catálogo...
+                </div>
+              ) : filteredProducts.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <PackageOpen className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  Nenhum produto encontrado.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {filteredProducts.map(produto => (
+                    <div
+                      key={produto.id}
+                      className="border border-border/50 rounded-lg p-4 flex flex-col justify-between bg-muted/20 hover:border-primary/40 transition-colors"
+                    >
+                      <div>
+                        <div className="text-xs text-muted-foreground font-mono mb-1">
+                          SKU: {produto.codigoSku ?? '—'}
+                        </div>
+                        <h4 className="font-semibold text-sm leading-tight">{produto.nome}</h4>
+                        <div className="text-base font-bold text-primary mt-2">
+                          {formatCurrency(produto.precoBase ?? 0)}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full mt-3 border-primary/30 text-primary hover:bg-primary/10"
+                        onClick={() => addToCart(produto)}
+                      >
+                        Adicionar
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+
+          {/* Coluna direita: carrinho */}
+          <div className="w-full md:w-96 flex flex-col bg-muted/10">
+            <div className="p-4 border-b border-border/30 font-semibold text-sm flex justify-between items-center shrink-0">
+              Resumo do Pedido
+              <span className="bg-primary text-white text-xs px-2 py-1 rounded-full">
+                {cart.length} iten{cart.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            <ScrollArea className="flex-1 p-4">
+              {cart.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground flex flex-col items-center">
+                  <ShoppingCart className="h-12 w-12 mb-2 opacity-20" />
+                  <p className="text-sm">O carrinho está vazio.</p>
+                  <p className="text-xs mt-1 text-muted-foreground/60">
+                    Clique nos produtos para adicionar.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {cart.map(item => (
+                    <div
+                      key={item.product.id}
+                      className="bg-card p-3 rounded-lg border border-border/40 flex items-center justify-between"
+                    >
+                      <div className="flex-1 pr-2 min-w-0">
+                        <h5 className="font-medium text-sm leading-tight truncate">
+                          {item.product.nome}
+                        </h5>
+                        <div className="text-primary font-semibold text-sm mt-0.5">
+                          {formatCurrency(item.product.precoBase ?? 0)}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 bg-muted rounded-md border border-border/30 p-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => updateQuantity(item.product.id, -1)}
+                        >
+                          {item.quantidade === 1
+                            ? <Trash2 className="h-3 w-3 text-destructive" />
+                            : <Minus className="h-3 w-3" />
+                          }
+                        </Button>
+                        <span className="text-sm font-semibold w-5 text-center tabular-nums">
+                          {item.quantidade}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => updateQuantity(item.product.id, 1)}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Observações */}
+                  <div className="mt-4 space-y-2">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                      Observações (opcional)
+                    </Label>
+                    <Input
+                      placeholder="Ex: Entrega urgente..."
+                      className="bg-card border-border/50 text-sm"
+                      value={descricao}
+                      onChange={e => setDescricao(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </ScrollArea>
+
+            {/* Rodapé com total */}
+            <div className="p-5 border-t border-border/30 bg-card shrink-0">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-sm text-muted-foreground font-medium">Valor Total:</span>
+                <span className="text-2xl font-bold">{formatCurrency(valorTotal)}</span>
+              </div>
+              <Button
+                className="w-full h-11 gradient-primary border-0 text-white font-semibold"
+                onClick={handleSubmit}
+                disabled={cart.length === 0 || createOrder.isPending}
+              >
+                {createOrder.isPending
+                  ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  : <ShoppingCart className="h-4 w-4 mr-2" />
+                }
+                Gerar Orçamento
+              </Button>
+            </div>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
 }

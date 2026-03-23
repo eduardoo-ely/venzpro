@@ -17,33 +17,29 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Service de autenticação.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final UserRepository userRepository;
+    private final UserRepository         userRepository;
     private final OrganizationRepository organizationRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
-    private final AuditService auditService;
+    private final PasswordEncoder        passwordEncoder;
+    private final JwtService             jwtService;
+    private final AuditService           auditService;
 
-    // ----------------------------------------------------------------
-    // LOGIN
-    // ----------------------------------------------------------------
+    // ── LOGIN ─────────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
-        String emailPadronizado = request.email().toLowerCase().trim();
-        User user = userRepository.findByEmail(emailPadronizado)
+        String email = request.email().toLowerCase().trim();
+
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BadCredentialsException("Credenciais inválidas"));
 
         if (!passwordEncoder.matches(request.senha(), user.getSenha())) {
-            log.warn("Tentativa de login com senha inválida para: {}", request.email());
-            auditService.logError(null, null, AuditService.LOGIN_FAILED, "Email: " + request.email());
+            log.warn("Tentativa de login com senha inválida para: {}", email);
+            auditService.logError(null, null, AuditService.LOGIN_FAILED, "Email: " + email);
             throw new BadCredentialsException("Credenciais inválidas");
         }
 
@@ -58,35 +54,41 @@ public class AuthService {
         );
 
         log.info("Login bem-sucedido para usuário: {}", user.getId());
-        auditService.log(user.getOrganization().getId(), user.getId(), AuditService.LOGIN, "User", user.getId(), "Login: " + user.getEmail());
+        auditService.log(
+                user.getOrganization().getId(), user.getId(),
+                AuditService.LOGIN, "User", user.getId(), "Login: " + user.getEmail()
+        );
+
         return buildAuthResponse(token, user, org);
     }
 
-    // ----------------------------------------------------------------
-    // REGISTRO
-    // ----------------------------------------------------------------
+    // ── REGISTRO ──────────────────────────────────────────────────────────────
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        String emailPadronizado = request.email().toLowerCase().trim();
+        String email = request.email().toLowerCase().trim();
 
-        if (userRepository.existsByEmail(emailPadronizado)) {
+        if (userRepository.existsByEmail(email)) {
             throw new BusinessException("Este email já está em uso.");
         }
 
         Organization org = Organization.builder()
                 .nome(request.nomeOrganizacao() != null && !request.nomeOrganizacao().isBlank()
-                        ? request.nomeOrganizacao() : "Org de " + request.nome())
+                        ? request.nomeOrganizacao()
+                        : "Org de " + request.nome())
                 .tipo(request.tipoOrganizacao())
                 .build();
         org = organizationRepository.save(org);
 
         User user = User.builder()
                 .nome(request.nome())
-                .email(request.email())
+                .email(email)
                 .senha(passwordEncoder.encode(request.senha()))
                 .role(UserRole.ADMIN)
                 .organization(org)
+                .podeAprovar(true)
+                .podeExportar(true)
+                .podeVerDashboard(true)
                 .build();
         user = userRepository.save(user);
 
@@ -98,24 +100,20 @@ public class AuthService {
         );
 
         log.info("Novo usuário registrado: {} na organização: {}", user.getId(), org.getId());
-        auditService.log(org.getId(), user.getId(), AuditService.REGISTER, "User", user.getId(), "Registro: " + user.getEmail());
+        auditService.log(
+                org.getId(), user.getId(),
+                AuditService.REGISTER, "User", user.getId(), "Registro: " + user.getEmail()
+        );
+
         return buildAuthResponse(token, user, org);
     }
 
-    // ----------------------------------------------------------------
-    // PRIVADOS
-    // ----------------------------------------------------------------
+    // ── PRIVADOS ──────────────────────────────────────────────────────────────
 
     private AuthResponse buildAuthResponse(String token, User user, Organization org) {
         return new AuthResponse(
                 token,
-                new AuthResponse.UserData(
-                        user.getId().toString(),
-                        user.getNome(),
-                        user.getEmail(),
-                        user.getRole(),
-                        user.getOrganization().getId().toString()
-                ),
+                AuthResponse.UserData.from(user),
                 new AuthResponse.OrganizationData(
                         org.getId().toString(),
                         org.getNome(),

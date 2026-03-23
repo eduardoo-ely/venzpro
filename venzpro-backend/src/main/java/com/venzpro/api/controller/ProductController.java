@@ -29,11 +29,66 @@ public class ProductController {
     private final ProductService productService;
     private final ProductImportExportService importExportService;
 
+    // ── CRUD ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Cria um novo produto no catálogo da organização autenticada.
+     * organizationId vem do JWT — nunca do corpo da requisição.
+     */
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ProductResponse create(
+            @Valid @RequestBody ProductRequest request,
+            @AuthenticationPrincipal VenzproPrincipal principal) {
+        return productService.create(request, principal.organizationId());
+    }
+
+    @GetMapping
+    public Page<ProductResponse> findAll(Pageable pageable) {
+        return productService.findAll(pageable);
+    }
+
+    @GetMapping("/search")
+    public Page<ProductResponse> search(
+            @RequestParam String termo,
+            Pageable pageable) {
+        return productService.search(termo, pageable);
+    }
+
+    @GetMapping("/{id}")
+    public ProductResponse findById(@PathVariable UUID id) {
+        return productService.findById(id);
+    }
+
+    @PutMapping("/{id}")
+    public ProductResponse update(
+            @PathVariable UUID id,
+            @Valid @RequestBody ProductRequest request) {
+        return productService.update(id, request);
+    }
+
+    /**
+     * Apenas ADMIN e GERENTE podem alterar o preço base do catálogo.
+     */
+    @PatchMapping("/{id}/price")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GERENTE')")
+    public ProductResponse patchPrice(
+            @PathVariable UUID id,
+            @Valid @RequestBody PatchPriceRequest request) {
+        return productService.patchPrice(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) {
+        productService.delete(id);
+    }
+
     // ── IMPORTAÇÃO E EXPORTAÇÃO ───────────────────────────────────────────────
 
     /**
      * Importação assíncrona de produtos via CSV.
-     * Passa organizationId explicitamente para evitar perda de contexto no @Async.
+     * organizationId passado explicitamente para evitar perda de contexto no @Async.
      */
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<String> importCsv(
@@ -44,48 +99,15 @@ public class ProductController {
                 .body("Importação iniciada. Catálogo atualizado em breve.");
     }
 
-    @GetMapping(value = "/export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    public ResponseEntity<byte[]> exportExcel() {
-        byte[] excelFile = importExportService.exportProductsToExcel();
+    @GetMapping(
+            value  = "/export",
+            produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    public ResponseEntity<byte[]> exportExcel(
+            @AuthenticationPrincipal VenzproPrincipal principal) {
+        byte[] excel = importExportService.exportProductsToExcel(principal.organizationId());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"catalogo_produtos.xlsx\"")
-                .body(excelFile);
-    }
-
-    // ── CRUD ──────────────────────────────────────────────────────────────────
-
-    @GetMapping
-    public Page<ProductResponse> findAll(Pageable pageable) {
-        return productService.findAll(pageable);
-    }
-
-    @GetMapping("/search")
-    public Page<ProductResponse> search(@RequestParam String termo, Pageable pageable) {
-        return productService.search(termo, pageable);
-    }
-
-    @GetMapping("/{id}")
-    public ProductResponse findById(@PathVariable UUID id) {
-        return productService.findById(id);
-    }
-
-    @PutMapping("/{id}")
-    public ProductResponse update(@PathVariable UUID id, @Valid @RequestBody ProductRequest request) {
-        return productService.update(id, request);
-    }
-
-    /**
-     * Apenas ADMIN e GERENTE podem alterar o preço base do catálogo.
-     */
-    @PatchMapping("/{id}/price")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GERENTE')")
-    public ProductResponse patchPrice(@PathVariable UUID id, @Valid @RequestBody PatchPriceRequest request) {
-        return productService.patchPrice(id, request);
-    }
-
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) {
-        productService.delete(id);
+                .body(excel);
     }
 }

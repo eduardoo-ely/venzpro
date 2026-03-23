@@ -36,7 +36,7 @@ export interface Product {
   empresaNome?: string;
   nome: string;
   descricao?: string;
-  precoBase?: number;
+  precoBase: number;
   unidade?: string;
   ativo?: boolean;
   codigoSku?: string;
@@ -54,6 +54,7 @@ export interface Customer {
   cpfCnpj?: string;
   ownerId?: string;
   ownerNome?: string;
+  createdBy?: string;
   organizationId: string;
   createdAt?: string;
 }
@@ -80,19 +81,20 @@ export interface CreateOrderPayload {
 export interface Order {
   id: string;
   customerId: string;
-  clienteNome?: string;
+  clienteNome: string;
   companyId: string;
-  empresaNome?: string;
+  empresaNome: string;
   userId: string;
-  vendedorNome?: string;
+  vendedorNome: string;
+  organizationId: string;
   valorTotal: number;
   status: OrderStatus;
   descricao?: string;
   items: OrderItem[];
   canceladoPor?: string;
+  canceladoEm?: string;
   motivoCancelamento?: string;
   createdAt?: string;
-  organizationId: string;
 }
 
 export interface Event {
@@ -129,6 +131,12 @@ export interface AuthState {
   organization: Organization | null;
   isAuthenticated: boolean;
   login: (email: string, senha: string) => Promise<void>;
-  register: (nome: string, email: string, senha: string, tipo: OrganizationType, nomeOrganizacao?: string) => Promise<void>;
+  register: (
+    nome: string,
+    email: string,
+    senha: string,
+    tipo: OrganizationType,
+    nomeOrganizacao?: string
+  ) => Promise<void>;
   logout: () => void;
 }

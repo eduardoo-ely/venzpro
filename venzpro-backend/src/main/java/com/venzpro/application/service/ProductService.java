@@ -4,7 +4,6 @@ import com.venzpro.application.dto.request.PatchPriceRequest;
 import com.venzpro.application.dto.request.ProductRequest;
 import com.venzpro.application.dto.response.ProductResponse;
 import com.venzpro.infrastructure.security.TenantContext;
-import com.venzpro.infrastructure.exception.BusinessException;
 import com.venzpro.infrastructure.exception.ResourceNotFoundException;
 import com.venzpro.domain.entity.Product;
 import com.venzpro.domain.repository.CompanyRepository;
@@ -28,16 +27,17 @@ public class ProductService {
     private final CompanyRepository      companyRepository;
     private final OrganizationRepository organizationRepository;
 
-    @Transactional
-    public ProductResponse create(ProductRequest req) {
-        final UUID orgId = TenantContext.get();
+    // ── Criar produto (organizationId sempre vem do JWT via controller) ───────
 
-        var org = organizationRepository.findById(orgId)
-                .orElseThrow(() -> new ResourceNotFoundException("Organização", orgId));
+    @Transactional
+    public ProductResponse create(ProductRequest req, UUID organizationId) {
+        // Garante que a organização existe
+        organizationRepository.findById(organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Organização", organizationId));
 
         var company = req.companyId() != null
-                ? companyRepository.findByIdAndOrganizationId(req.companyId(), orgId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()))
+                ? companyRepository.findByIdAndOrganizationId(req.companyId(), organizationId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()))
                 : null;
 
         var product = Product.builder()
@@ -45,13 +45,14 @@ public class ProductService {
                 .descricao(req.descricao())
                 .precoBase(req.precoBase())
                 .unidade(req.unidade())
+                .codigoSku(req.codigoSku())
                 .company(company)
                 .build();
 
-        product.setOrganizationId(orgId);
+        product.setOrganizationId(organizationId);
 
         var saved = productRepository.save(product);
-        log.info("Produto criado: {} na org: {}", saved.getId(), orgId);
+        log.info("Produto criado: {} na org: {}", saved.getId(), organizationId);
         return ProductResponse.from(saved);
     }
 
@@ -97,7 +98,7 @@ public class ProductService {
 
         var company = req.companyId() != null
                 ? companyRepository.findByIdAndOrganizationId(req.companyId(), orgId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()))
+                        .orElseThrow(() -> new ResourceNotFoundException("Empresa", req.companyId()))
                 : null;
 
         product.setNome(req.nome());
