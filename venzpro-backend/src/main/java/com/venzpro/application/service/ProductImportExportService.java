@@ -35,32 +35,31 @@ public class ProductImportExportService {
     private static final int BATCH_SIZE = 500;
 
     @Async
-    public void importProductsAsync(MultipartFile file) {
-        final UUID organizationId = TenantContext.get();
-
+    public void importProductsAsync(MultipartFile file, UUID organizationId) {
+        // organizationId já está capturado na thread principal, passado explicitamente
+        log.info("Iniciando importação de produtos para org: {}", organizationId);
         try {
-            TenantContext.set(organizationId);
-            log.info("Iniciando importação de produtos para org: {}", organizationId);
-
-            try (Reader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8);
-                 CSVReader csvReader = new CSVReaderBuilder(reader).withSkipLines(1).build()) {
+            try (Reader reader = new InputStreamReader(
+                    file.getInputStream(), StandardCharsets.UTF_8);
+                 CSVReader csvReader = new CSVReaderBuilder(reader)
+                         .withSkipLines(1).build()) {
 
                 String[] nextLine;
                 List<Product> batch = new ArrayList<>();
                 int totalImported = 0;
 
                 while ((nextLine = csvReader.readNext()) != null) {
-                    if (nextLine.length < 3) continue;
+                    if (nextLine.length < 4) continue;
 
                     Product p = Product.builder()
                             .nome(nextLine[0].trim())
                             .descricao(nextLine[1].trim())
-                            .precoBase(new BigDecimal(nextLine[2].trim().replace(",", ".")))
-                            .unidade(UnidadeMedida.valueOf(nextLine[3].trim().toUpperCase()))
-                            .codigoSku(null)
+                            .precoBase(new BigDecimal(
+                                    nextLine[2].trim().replace(",", ".")))
+                            .unidade(UnidadeMedida.valueOf(
+                                    nextLine[3].trim().toUpperCase()))
                             .ativo(true)
                             .build();
-
                     p.setOrganizationId(organizationId);
                     batch.add(p);
 
@@ -70,20 +69,20 @@ public class ProductImportExportService {
                         batch.clear();
                     }
                 }
-
                 if (!batch.isEmpty()) {
                     productRepository.saveAll(batch);
                     totalImported += batch.size();
                 }
-
-                log.info("Importação concluída. Total de {} produtos importados.", totalImported);
+                log.info("Importação concluída: {} produtos para org {}",
+                        totalImported, organizationId);
             }
         } catch (Exception e) {
-            log.error("Erro ao importar CSV para org {}: {}", organizationId, e.getMessage());
-        } finally {
-            TenantContext.clear();
+            log.error("Erro ao importar CSV para org {}: {}",
+                    organizationId, e.getMessage());
         }
+        // Sem TenantContext.set/clear — desnecessário quando não há ThreadLocal
     }
+
 
     @Transactional(readOnly = true)
     public byte[] exportProductsToExcel() {

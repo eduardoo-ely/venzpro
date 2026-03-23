@@ -236,7 +236,7 @@ VALUES (
            'a0000000-0000-0000-0000-000000000001',
            'Administrador',
            'admin@venzpro.com',
-           '$2a$12$UlJBH7bJyQnVh0nAJmQZEuGcEe.s0I3eZHMpOwBH1NLTRrn7YNkb6',
+           'admin123'
            'ADMIN',
            FALSE,
            NOW()

@@ -32,83 +32,101 @@ public class CustomerService {
     private final OrganizationRepository         organizationRepository;
     private final CustomerOwnerHistoryRepository ownerHistoryRepository;
     private final AuditService                   auditService;
+    private final NotificationService            notificationService;
 
     // ── Constantes de auditoria ───────────────────────────────────────────────
+    private static final String CREATE_CUSTOMER   = "CREATE_CUSTOMER";
     private static final String APPROVE_CUSTOMER  = "APPROVE_CUSTOMER";
     private static final String REJECT_CUSTOMER   = "REJECT_CUSTOMER";
     private static final String ASSIGN_OWNER      = "ASSIGN_OWNER";
     private static final String UNASSIGN_OWNER    = "UNASSIGN_OWNER";
 
-    // ── CREATE ────────────────────────────────────────────────────────────────
-
+    // ── CREATE ────────────────────────────────────────────────────────────
     @Transactional
     public CustomerResponse create(CustomerRequest req, UUID userId) {
         UUID orgId = TenantContext.get();
 
-        var user = userRepository.findByIdForCurrentTenant(userId)
+        var user = userRepository.findByIdAndOrganizationId(userId, orgId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuário", userId));
         var org = organizationRepository.findById(orgId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organização", orgId));
+
+        // VALIDAÇÃO: CPF/CNPJ duplicado por organização — retorno amigável
+        String docNormalizado = normalizarDocumento(req.cpfCnpj());
+        if (docNormalizado != null && !docNormalizado.isBlank()) {
+            if (customerRepository.existsByCpfCnpjAndOrganizationId(docNormalizado, orgId)) {
+                throw new BusinessException(
+                        "Já existe um cliente cadastrado com este CPF/CNPJ nesta organização."
+                );
+            }
+        }
 
         var customer = Customer.builder()
                 .nome(req.nome())
                 .telefone(req.telefone())
                 .email(req.email())
                 .cidade(req.cidade())
-                .cpfCnpj(normalizarDocumento(req.cpfCnpj()))
-                .owner(user)
+                .cpfCnpj(docNormalizado)
+                .owner(null)
                 .createdBy(user)
                 .organization(org)
                 .build();
 
-        return CustomerResponse.from(customerRepository.save(customer));
+        Customer saved = customerRepository.save(customer);
+        auditService.log(orgId, userId, CREATE_CUSTOMER,
+                "Customer", saved.getId(), "Cliente: " + saved.getNome());
+        return CustomerResponse.from(saved);
     }
 
-    // ── READ ──────────────────────────────────────────────────────────────────
+    // ── READ — respeita visibilidade por role ──────────────────────────────
+    @Transactional(readOnly = true)
+    public List<CustomerResponse> findAll(
+            UUID organizationId, UUID userId, UserRole role) {
+        List<Customer> customers;
+
+        if (role == UserRole.VENDEDOR) {
+            customers = customerRepository
+                    .findAllByOrganizationIdAndOwnerId(organizationId, userId);
+        } else {
+            customers = customerRepository
+                    .findAllByOrganizationId(organizationId);
+        }
+        return customers.stream().map(CustomerResponse::from).toList();
+    }
 
     @Transactional(readOnly = true)
-    public List<CustomerResponse> findAll() {
-        return customerRepository.findAllForCurrentTenant()
-                .stream().map(CustomerResponse::from).toList();
+    public CustomerResponse findById(UUID id, UUID organizationId) {
+        return customerRepository.findByIdAndOrganizationId(id, organizationId)
+                .map(CustomerResponse::from)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente", id));
     }
 
-    @Transactional(readOnly = true)
-    public CustomerResponse findById(UUID id) {
-        return CustomerResponse.from(customerRepository.getByIdOrThrow(id, "Cliente"));
-    }
-
-    // ── UPDATE DADOS ──────────────────────────────────────────────────────────
-
+    // ── UPDATE DADOS — sem permitir mudança de status ─────────────────────
     @Transactional
-    public CustomerResponse update(UUID id, CustomerRequest req) {
-        var customer = customerRepository.getByIdOrThrow(id, "Cliente");
+    public CustomerResponse update(UUID id, CustomerRequest req, UUID organizationId) {
+        var customer = customerRepository.findByIdAndOrganizationId(id, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente", id));
 
+        // VALIDAÇÃO: CPF/CNPJ duplicado ao editar (excluindo o próprio)
+        String docNormalizado = normalizarDocumento(req.cpfCnpj());
+        if (docNormalizado != null && !docNormalizado.isBlank()
+                && !docNormalizado.equals(customer.getCpfCnpj())) {
+            if (customerRepository.existsByCpfCnpjAndOrganizationIdAndIdNot(
+                    docNormalizado, organizationId, id)) {
+                throw new BusinessException(
+                        "Já existe outro cliente com este CPF/CNPJ nesta organização."
+                );
+            }
+        }
         customer.setNome(req.nome());
         customer.setTelefone(req.telefone());
         customer.setEmail(req.email());
         customer.setCidade(req.cidade());
-
-        if (req.cpfCnpj() != null) {
-            customer.setCpfCnpj(normalizarDocumento(req.cpfCnpj()));
-        }
-        if (req.status() != null) {
-            customer.setStatus(req.status());
-        }
-
+        if (docNormalizado != null) customer.setCpfCnpj(docNormalizado);
         return CustomerResponse.from(customerRepository.save(customer));
     }
 
     // ── UPDATE STATUS (APROVAÇÃO / REJEIÇÃO) ──────────────────────────────────
-
-    /**
-     * Altera o status de um cliente.
-     *
-     * Regras aplicadas:
-     *  - Apenas ADMIN e GERENTE (dupla camada: @PreAuthorize + validação aqui)
-     *  - Somente PENDENTE pode ser aprovado ou rejeitado
-     *  - Rejeição exige motivo
-     *  - Auditoria registrada com ação específica
-     */
     @Transactional
     public CustomerResponse updateStatus(UUID id,
                                          UUID organizationId,
@@ -143,11 +161,17 @@ public class CustomerService {
                 + (req.motivo() != null ? " | Motivo: " + req.motivo() : "");
         auditService.log(organizationId, requesterId, acao, "Customer", id, detalhes);
 
+        // NOVO: Notificação de aprovação sem owner
+        if (req.status() == CustomerStatus.APROVADO && saved.getOwner() == null) {
+            notificationService.notificarClienteAprovadoSemOwner(
+                    organizationId, customer.getNome());
+        }
+
         return CustomerResponse.from(saved);
     }
 
     // ── UPDATE OWNER (CARTEIRA) ───────────────────────────────────────────────
-@Transactional
+    @Transactional
     public CustomerResponse updateOwner(UUID id,
                                         UUID organizationId,
                                         UUID requesterId,
@@ -214,21 +238,27 @@ public class CustomerService {
                 + " | Novo: "     + (newOwner != null ? newOwner.getNome() : "nenhum");
         auditService.log(organizationId, requesterId, acao, "Customer", id, detalhes);
 
+        // NOVO: Notificação de cliente perdendo o owner
+        if (newOwner == null && oldOwner != null) {
+            notificationService.notificarClienteSemOwner(
+                    organizationId, customer.getNome());
+        }
+
         return CustomerResponse.from(saved);
     }
 
-    // ── DELETE ────────────────────────────────────────────────────────────────
-
+    // ── DELETE —────────────────────────────────────────────────────────────────
     @Transactional
-    public void delete(UUID id) {
-        var customer = customerRepository.getByIdOrThrow(id, "Cliente");
+    public void delete(UUID id, UUID organizationId) {
+        var customer = customerRepository.findByIdAndOrganizationId(id, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente", id));
         customerRepository.delete(customer);
     }
 
     // ── HELPERS ───────────────────────────────────────────────────────────────
-
     private String normalizarDocumento(String doc) {
         if (doc == null || doc.isBlank()) return null;
         return doc.replaceAll("[^0-9]", "");
     }
+
 }

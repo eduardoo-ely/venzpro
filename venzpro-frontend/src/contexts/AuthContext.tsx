@@ -30,10 +30,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const persist = (token: string, u: User, o: Organization) => {
     localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(AUTH_KEY, JSON.stringify({ user: u, organization: o }));
+    // NÃO salva AUTH_KEY — dados ficam apenas em memória (state React)
     setUser(u);
     setOrganization(o);
   };
+
+// Para restaurar sessão após reload, decodifique o JWT:
+  useEffect(() => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return;
+
+    try {
+      // Decodifica o payload do JWT (sem verificar assinatura — ok no frontend)
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const now = Math.floor(Date.now() / 1000);
+
+      if (payload.exp < now) {
+        // Token expirado — limpa e não restaura
+        localStorage.removeItem(TOKEN_KEY);
+        return;
+      }
+
+      // Revalida com o backend para garantir que token ainda é válido
+      api.get('/users/me').then(res => {
+        setUser(res.data.user);
+        setOrganization(res.data.organization);
+      }).catch(() => {
+        localStorage.removeItem(TOKEN_KEY);
+      });
+    } catch {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  }, []);
 
   const login = useCallback(async (email: string, senha: string) => {
     const res = await authApi.login({ email, senha });

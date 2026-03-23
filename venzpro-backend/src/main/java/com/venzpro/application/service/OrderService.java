@@ -273,18 +273,33 @@ public class OrderService {
     // ── HELPERS PRIVADOS ──────────────────────────────────────────────────────
 
     private void validateCustomerForOrder(Customer customer, User user) {
+        // Regra §12.6.1: cliente precisa estar APROVADO
         if (customer.getStatus() != CustomerStatus.APROVADO) {
             throw new BusinessException(
                     "Cliente precisa estar APROVADO para gerar pedido. " +
-                            "Status atual: " + customer.getStatus()
+                            "Status atual: " + customer.getStatus() + ". " +
+                            "Solicite a aprovação ao gerente ou administrador."
             );
         }
+
+        // Regra §12.6.2: cliente precisa ter um responsável (owner)
+        if (customer.getOwner() == null) {
+            throw new BusinessException(
+                    "O cliente \"" + customer.getNome() + "\" não possui responsável atribuído. " +
+                            "Atribua um responsável antes de criar o pedido."
+            );
+        }
+
+        // Regra §12.6.3: VENDEDOR só pode criar pedido para seus próprios clientes
         if (user.getRole() == UserRole.VENDEDOR) {
-            if (customer.getOwner() == null || !customer.getOwner().getId().equals(user.getId())) {
-                throw new TenantViolationException("Este cliente não pertence à sua carteira.");
+            if (!customer.getOwner().getId().equals(user.getId())) {
+                throw new TenantViolationException(
+                        "Você não pode criar pedidos para clientes de outro vendedor."
+                );
             }
         }
     }
+
 
     private void applyItems(Order order, List<OrderItemRequest> items, UUID organizationId) {
         if (items == null || items.isEmpty()) {

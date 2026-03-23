@@ -64,12 +64,14 @@ const ACAO_CLASS: Partial<Record<OrderStatus, string>> = {
 
 // ── Tipos internos ────────────────────────────────────────────────────────────
 
+// ▶ Novo: tipo para item individual no formulário
+type ItemForm = { productId: string; quantidade: string };
+
 type Form = {
   customerId: string;
   companyId:  string;
   descricao:  string;
-  productId:  string;
-  quantidade: string;
+  items:      ItemForm[]; // ▶ substituiu productId + quantidade
 };
 
 type CancelacaoState = {
@@ -78,8 +80,12 @@ type CancelacaoState = {
   motivo:  string;
 };
 
+// ▶ Atualizado: estado inicial com array de itens
 const emptyForm = (): Form => ({
-  customerId: '', companyId: '', descricao: '', productId: '', quantidade: '1',
+  customerId: '',
+  companyId:  '',
+  descricao:  '',
+  items: [{ productId: '', quantidade: '1' }],
 });
 
 // ── Componente principal ──────────────────────────────────────────────────────
@@ -103,32 +109,55 @@ export default function PedidosPage() {
   /** Pedido pode ser editado apenas em ORCAMENTO */
   const podeEditar = (order: Order) => order.status === 'ORCAMENTO';
 
+  // ── Handlers — itens do formulário ───────────────────────────────────────────
+
+  // ▶ Adiciona uma linha em branco
+  const addItem = () =>
+      setForm(f => ({ ...f, items: [...f.items, { productId: '', quantidade: '1' }] }));
+
+  // ▶ Remove a linha pelo índice (mínimo 1 item sempre)
+  const removeItem = (index: number) =>
+      setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== index) }));
+
+  // ▶ Atualiza campo de uma linha específica
+  const updateItem = (index: number, field: keyof ItemForm, value: string) =>
+      setForm(f => ({
+        ...f,
+        items: f.items.map((item, i) => i === index ? { ...item, [field]: value } : item),
+      }));
+
   // ── Handlers — formulário ────────────────────────────────────────────────────
 
   const openNew = () => { setEditing(null); setForm(emptyForm()); setOpen(true); };
 
   const openEdit = (order: Order) => {
-    // Segurança extra no frontend: não abre o modal se não pode editar
     if (!podeEditar(order)) return;
-    const firstItem = order.items[0];
     setEditing(order);
     setForm({
       customerId: order.customerId,
       companyId:  order.companyId,
       descricao:  order.descricao ?? '',
-      productId:  firstItem?.productId ?? '',
-      quantidade: firstItem ? String(firstItem.quantidade) : '1',
+      // ▶ Mapeia todos os itens existentes (não só o primeiro)
+      items: order.items.length > 0
+          ? order.items.map(it => ({
+            productId: it.productId,
+            quantidade: String(it.quantidade),
+          }))
+          : [{ productId: '', quantidade: '1' }],
     });
     setOpen(true);
   };
 
+  // ▶ handleSubmit atualizado para usar o array de itens
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload: CreateOrderPayload = {
       customerId: form.customerId,
       companyId:  form.companyId,
       descricao:  form.descricao || undefined,
-      items: [{ productId: form.productId, quantidade: Number(form.quantidade) || 1 }],
+      items: form.items
+          .filter(i => i.productId && Number(i.quantidade) > 0)
+          .map(i => ({ productId: i.productId, quantidade: Number(i.quantidade) })),
     };
     if (editing) await update.mutateAsync({ id: editing.id, ...payload });
     else         await create.mutateAsync(payload);
@@ -150,6 +179,12 @@ export default function PedidosPage() {
     updateStatus.mutate({ id: cancelacao.orderId, status: 'CANCELADO', motivo: cancelacao.motivo });
     setCancelacao({ open: false, orderId: null, motivo: '' });
   };
+
+  // ▶ Formulário válido: pelo menos 1 item com produto selecionado
+  const formValido =
+      !!form.customerId &&
+      !!form.companyId &&
+      form.items.some(i => i.productId && Number(i.quantidade) > 0);
 
   const isPending    = create.isPending || update.isPending;
   const isLoadingAll = isLoading || loadingC || loadingCo || loadingP;
@@ -272,7 +307,6 @@ export default function PedidosPage() {
                       {colOrders.length}
                     </span>
                         </div>
-                        {/* Só ORCAMENTO tem atalho de criar */}
                         {col === 'ORCAMENTO' && (
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={openNew}>
                               <Plus className="h-3.5 w-3.5" />
@@ -295,7 +329,6 @@ export default function PedidosPage() {
                                         <p className="text-[10px] text-muted-foreground">{order.empresaNome || order.companyId}</p>
                                       </div>
                                     </div>
-                                    {/* Ícone de cadeado para pedidos não editáveis */}
                                     {!podeEditar(order)
                                         ? <Lock className="h-3.5 w-3.5 text-muted-foreground/40" />
                                         : <GripVertical className="h-4 w-4 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -310,7 +343,6 @@ export default function PedidosPage() {
                               {order.createdAt ? new Date(order.createdAt).toLocaleDateString('pt-BR') : ''}
                             </span>
                                   </div>
-                                  {/* Ações de transição geradas dinamicamente */}
                                   <AcoesKanban order={order} />
                                 </CardContent>
                               </Card>
@@ -366,7 +398,6 @@ export default function PedidosPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1 items-center">
-                              {/* Botões de transição inline */}
                               {TRANSICOES_VALIDAS[order.status].slice(0, 2).map(novoStatus => (
                                   <Button key={novoStatus} variant="ghost" size="icon"
                                           className={`h-7 w-7 ${ACAO_CLASS[novoStatus] ?? ''}`}
@@ -379,7 +410,6 @@ export default function PedidosPage() {
                             </span>
                                   </Button>
                               ))}
-                              {/* Editar com tooltip quando bloqueado */}
                               <BotaoEditar order={order} variant="icon" />
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
@@ -418,6 +448,7 @@ export default function PedidosPage() {
               <DialogTitle>{editing ? 'Editar Pedido' : 'Novo Pedido'}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Cliente + Empresa */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Cliente *</Label>
@@ -440,36 +471,59 @@ export default function PedidosPage() {
                   </Select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Produto *</Label>
-                  <Select value={form.productId}
-                          onValueChange={v => setForm(f => ({ ...f, productId: v }))}>
-                    <SelectTrigger className="bg-muted border-border/50">
-                      <SelectValue placeholder="Selecione um produto" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Quantidade *</Label>
-                  <Input type="number" step="0.0001" min="0.0001"
-                         value={form.quantidade}
-                         onChange={e => setForm(f => ({ ...f, quantidade: e.target.value }))}
-                         required className="bg-muted border-border/50" />
-                </div>
+
+              {/* ▶ Lista dinâmica de itens (substitui os 2 campos fixos anteriores) */}
+              <div className="space-y-2">
+                {form.items.map((item, index) => (
+                    <div key={index} className="grid grid-cols-[1fr_120px_40px] gap-2 items-end">
+                      <div className="space-y-2">
+                        {index === 0 && <Label>Produto *</Label>}
+                        <Select value={item.productId}
+                                onValueChange={v => updateItem(index, 'productId', v)}>
+                          <SelectTrigger className="bg-muted border-border/50">
+                            <SelectValue placeholder="Selecione um produto" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {products.map(p => (
+                                <SelectItem key={p.id} value={p.id}>
+                                  {p.nome}
+                                </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        {index === 0 && <Label>Qtd *</Label>}
+                        <Input type="number" step="0.001" min="0.001"
+                               value={item.quantidade}
+                               onChange={e => updateItem(index, 'quantidade', e.target.value)}
+                               className="bg-muted border-border/50" />
+                      </div>
+                      <Button type="button" variant="ghost" size="icon"
+                              className="h-10 w-10 text-destructive"
+                              onClick={() => removeItem(index)}
+                              disabled={form.items.length === 1}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                ))}
+                <Button type="button" variant="outline" size="sm"
+                        className="w-full border-dashed" onClick={addItem}>
+                  <Plus className="h-4 w-4 mr-2" />Adicionar Item
+                </Button>
               </div>
+
+              {/* Descrição */}
               <div className="space-y-2">
                 <Label>Descrição</Label>
                 <Textarea value={form.descricao}
                           onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
                           className="bg-muted border-border/50" rows={3} />
               </div>
+
               <Button type="submit"
                       className="w-full gradient-primary border-0 text-white"
-                      disabled={isPending || !form.customerId || !form.companyId || !form.productId}>
+                      disabled={isPending || !formValido}>
                 {isPending ? 'Salvando...' : editing ? 'Salvar' : 'Criar Pedido'}
               </Button>
             </form>

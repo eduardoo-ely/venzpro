@@ -27,10 +27,14 @@ public class ProductController {
     private final ProductService productService;
     private final ProductImportExportService importExportService;
 
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public ProductResponse create(@Valid @RequestBody ProductRequest request) {
-        return productService.create(request);
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<String> importCsv(
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal VenzproPrincipal principal) {
+        // Passa organizationId explicitamente para evitar perda de contexto no @Async
+        importExportService.importProductsAsync(file, principal.organizationId());
+        return ResponseEntity.accepted()
+                .body("Importação iniciada. Catálogo atualizado em breve.");
     }
 
     @GetMapping

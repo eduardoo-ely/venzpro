@@ -33,21 +33,29 @@ public class CustomerController {
     }
 
     @GetMapping
-    public List<CustomerResponse> findAll() {
-        return customerService.findAll();
+    public List<CustomerResponse> findAll(
+            @AuthenticationPrincipal VenzproPrincipal principal) {
+        return customerService.findAll(
+                principal.organizationId(),
+                principal.userId(),
+                UserRole.valueOf(principal.role()));
     }
 
     @GetMapping("/{id}")
-    public CustomerResponse findById(@PathVariable UUID id) {
-        return customerService.findById(id);
+    public CustomerResponse findById(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal VenzproPrincipal principal) {
+        return customerService.findById(id, principal.organizationId());
     }
 
     @PutMapping("/{id}")
     public CustomerResponse update(
             @PathVariable UUID id,
-            @Valid @RequestBody CustomerRequest req) {
-        return customerService.update(id, req);
+            @Valid @RequestBody CustomerRequest req,
+            @AuthenticationPrincipal VenzproPrincipal principal) {
+        return customerService.update(id, req, principal.organizationId());
     }
+
 
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('ADMIN', 'GERENTE')")
@@ -84,7 +92,9 @@ public class CustomerController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) {
-        customerService.delete(id);
+    public void delete(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal VenzproPrincipal principal) {
+        customerService.delete(id, principal.organizationId());
     }
 }

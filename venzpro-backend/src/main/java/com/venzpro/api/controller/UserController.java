@@ -26,6 +26,11 @@ public class UserController {
         return userService.findByOrganization(principal.organizationId());
     }
 
+    @GetMapping("/me")
+    public UserResponse me(@AuthenticationPrincipal VenzproPrincipal principal) {
+        return userService.findById(principal.userId(), principal.organizationId());
+    }
+
     @GetMapping("/{id}")
     public UserResponse findById(@PathVariable UUID id,
                                  @AuthenticationPrincipal VenzproPrincipal principal) {
