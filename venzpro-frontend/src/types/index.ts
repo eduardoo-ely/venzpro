@@ -51,6 +51,7 @@ export interface Customer {
   status: CustomerStatus;
   cpfCnpj?: string;
   ownerId?: string;
+  ownerNome?: string;
   organizationId: string;
   createdAt?: string;
 }

@@ -2,27 +2,17 @@ package com.venzpro.infrastructure.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.security.Key;
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.UUID;
 import java.util.function.Function;
 
-/**
- * Serviço responsável por gerar e validar tokens JWT.
- *
- * Claims customizados armazenados no token:
- *   - sub         : userId (UUID)
- *   - organizationId : UUID do tenant
- *   - email       : email do usuário
- *   - role        : role do usuário (ex: ADMIN, VENDEDOR)
- */
 @Slf4j
 @Service
 public class JwtService {
@@ -33,34 +23,21 @@ public class JwtService {
     @Value("${jwt.expiration}")
     private long expiration;
 
-    // ── Geração ───────────────────────────────────────────────────────────────
-
-    /**
-     * Gera um JWT assinado com HMAC-SHA256 contendo os claims do usuário.
-     */
     public String generateToken(UUID userId, UUID organizationId, String email, String role) {
         return Jwts.builder()
-                .setSubject(userId.toString())
+                .subject(userId.toString())
                 .claim("organizationId", organizationId.toString())
                 .claim("email", email)
                 .claim("role", role)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + expiration))
-                .signWith(getSignInKey(), SignatureAlgorithm.HS256)
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + expiration))
+                .signWith(getSignInKey())
                 .compact();
     }
 
-    // ── Validação ─────────────────────────────────────────────────────────────
-
-    /**
-     * Verifica se o token é válido (assinatura correta + não expirado).
-     */
     public boolean isTokenValid(String token) {
         try {
-            Jwts.parserBuilder()
-                    .setSigningKey(getSignInKey())
-                    .build()
-                    .parseClaimsJws(token);
+            Jwts.parser().verifyWith(getSignInKey()).build().parseSignedClaims(token);
             return !isTokenExpired(token);
         } catch (Exception e) {
             log.debug("Token inválido: {}", e.getMessage());
@@ -76,15 +53,12 @@ public class JwtService {
         return extractClaim(token, Claims::getExpiration);
     }
 
-    // ── Extração de Claims ────────────────────────────────────────────────────
-
     public UUID extractUserId(String token) {
         return UUID.fromString(extractClaim(token, Claims::getSubject));
     }
 
     public UUID extractOrganizationId(String token) {
-        String orgId = extractAllClaims(token).get("organizationId", String.class);
-        return UUID.fromString(orgId);
+        return UUID.fromString(extractAllClaims(token).get("organizationId", String.class));
     }
 
     public String extractEmail(String token) {
@@ -100,19 +74,14 @@ public class JwtService {
     }
 
     public Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSignInKey())
+        return Jwts.parser()
+                .verifyWith(getSignInKey())
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
-    // ── Chave ─────────────────────────────────────────────────────────────────
-
-    private Key getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(
-                java.util.Base64.getEncoder().encodeToString(secret.getBytes())
-        );
-        return Keys.hmacShaKeyFor(keyBytes);
+    private SecretKey getSignInKey() {
+        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 }

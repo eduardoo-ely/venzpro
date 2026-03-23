@@ -1,12 +1,16 @@
 package com.venzpro.api.controller;
 
+import com.venzpro.application.dto.request.CustomerOwnerRequest;
 import com.venzpro.application.dto.request.CustomerRequest;
+import com.venzpro.application.dto.request.CustomerStatusRequest;
 import com.venzpro.application.dto.response.CustomerResponse;
 import com.venzpro.application.service.CustomerService;
+import com.venzpro.domain.enums.UserRole;
 import com.venzpro.infrastructure.security.VenzproPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -43,6 +47,39 @@ public class CustomerController {
             @PathVariable UUID id,
             @Valid @RequestBody CustomerRequest req) {
         return customerService.update(id, req);
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GERENTE')")
+    public CustomerResponse updateStatus(
+            @PathVariable UUID id,
+            @Valid @RequestBody CustomerStatusRequest req,
+            @AuthenticationPrincipal VenzproPrincipal principal) {
+
+        return customerService.updateStatus(
+                id,
+                principal.organizationId(),
+                principal.userId(),
+                UserRole.valueOf(principal.role()),
+                req
+        );
+    }
+
+
+    @PatchMapping("/{id}/owner")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GERENTE')")
+    public CustomerResponse updateOwner(
+            @PathVariable UUID id,
+            @RequestBody CustomerOwnerRequest req,
+            @AuthenticationPrincipal VenzproPrincipal principal) {
+
+        return customerService.updateOwner(
+                id,
+                principal.organizationId(),
+                principal.userId(),
+                UserRole.valueOf(principal.role()),
+                req
+        );
     }
 
     @DeleteMapping("/{id}")

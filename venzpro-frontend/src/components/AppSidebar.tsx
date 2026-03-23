@@ -1,6 +1,6 @@
 import {
-  LayoutDashboard, Users, Package, Calendar, Building2, FolderOpen,
-  Settings, LogOut, Zap, ShieldCheck,
+  LayoutDashboard, Users, Package, Calendar, Building2,
+  FolderOpen, Settings, LogOut, Zap, ShieldCheck, ShoppingBag,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state }  = useSidebar();
   const collapsed  = state === 'collapsed';
   const location   = useLocation();
   const { user, logout } = useAuth();
@@ -34,13 +34,17 @@ export function AppSidebar() {
 
   const items = [
     { title: 'Dashboard',     url: '/',             icon: LayoutDashboard, badge: null         },
-    { title: 'Clientes',      url: '/clientes',      icon: Users,           badge: null         },
-    { title: 'Pedidos',       url: '/pedidos',       icon: Package,         badge: pedidosBadge },
-    { title: 'Agenda',        url: '/agenda',        icon: Calendar,        badge: agendaBadge  },
-    { title: 'Empresas',      url: '/empresas',      icon: Building2,       badge: null         },
-    { title: 'Catálogos',     url: '/catalogos',     icon: FolderOpen,      badge: null         },
-    { title: 'Configurações', url: '/configuracoes', icon: Settings,        badge: null         },
-    ...(isAdmin ? [{ title: 'Usuários', url: '/usuarios', icon: ShieldCheck, badge: null }] : []),
+    { title: 'Clientes',      url: '/clientes',     icon: Users,           badge: null         },
+    { title: 'Pedidos',       url: '/pedidos',      icon: Package,         badge: pedidosBadge },
+    { title: 'Agenda',        url: '/agenda',       icon: Calendar,        badge: agendaBadge  },
+    { title: 'Empresas',      url: '/empresas',     icon: Building2,       badge: null         },
+    { title: 'Produtos',      url: '/produtos',     icon: ShoppingBag,     badge: null         },
+    { title: 'Catálogos',     url: '/catalogos',    icon: FolderOpen,      badge: null         },
+    { title: 'Configurações', url: '/configuracoes',icon: Settings,        badge: null         },
+    ...(isAdmin
+            ? [{ title: 'Usuários', url: '/usuarios', icon: ShieldCheck, badge: null }]
+            : []
+    ),
   ];
 
   return (

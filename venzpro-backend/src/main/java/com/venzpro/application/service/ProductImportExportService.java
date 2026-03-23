@@ -57,7 +57,7 @@ public class ProductImportExportService {
                             .descricao(nextLine[1].trim())
                             .precoBase(new BigDecimal(nextLine[2].trim().replace(",", ".")))
                             .unidade(UnidadeMedida.valueOf(nextLine[3].trim().toUpperCase()))
-                            .codigoSku(nextLine.length > 4 ? nextLine[4].trim() : null)
+                            .codigoSku(null)
                             .ativo(true)
                             .build();
 

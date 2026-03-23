@@ -7,31 +7,33 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 public record CustomerResponse(
-    UUID id,
-    String nome,
-    String telefone,
-    String email,
-    String cidade,
-    String cpfCnpj,
-    CustomerStatus status,
-    UUID ownerId,
-    UUID createdBy,
-    UUID organizationId,
-    LocalDateTime createdAt
+        UUID            id,
+        String          nome,
+        String          telefone,
+        String          email,
+        String          cidade,
+        String          cpfCnpj,
+        CustomerStatus  status,
+        UUID            ownerId,
+        String          ownerNome,
+        UUID            createdBy,
+        UUID            organizationId,
+        LocalDateTime   createdAt
 ) {
     public static CustomerResponse from(Customer c) {
         return new CustomerResponse(
-            c.getId(),
-            c.getNome(),
-            c.getTelefone(),
-            c.getEmail(),
-            c.getCidade(),
-            c.getCpfCnpj(),
-            c.getStatus(),
-            c.getOwner() != null ? c.getOwner().getId() : null,
-            c.getCreatedBy() != null ? c.getCreatedBy().getId() : null,
-            c.getOrganization().getId(),
-            c.getCreatedAt()
+                c.getId(),
+                c.getNome(),
+                c.getTelefone(),
+                c.getEmail(),
+                c.getCidade(),
+                c.getCpfCnpj(),
+                c.getStatus(),
+                c.getOwner() != null ? c.getOwner().getId()   : null,
+                c.getOwner() != null ? c.getOwner().getNome() : null,
+                c.getCreatedBy() != null ? c.getCreatedBy().getId() : null,
+                c.getOrganization().getId(),
+                c.getCreatedAt()
         );
     }
 }

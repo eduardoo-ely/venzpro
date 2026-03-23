@@ -31,8 +31,7 @@ public record ProductResponse(
                 p.getPrecoBase(),
                 p.getUnidade(),
                 p.getAtivo(),
-                p.getCodigoSku() != null ? p.getCodigoSku() : null,
-                p.getCreatedAt(),
+                p.getCodigoSku() != null ? p.getCodigoSku().toString() : (String) null,                p.getCreatedAt(),
                 p.getUpdatedAt()
         );
     }

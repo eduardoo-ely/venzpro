@@ -13,9 +13,10 @@ import ClientesPage      from '@/pages/ClientesPage';
 import PedidosPage       from '@/pages/PedidosPage';
 import AgendaPage        from '@/pages/AgendaPage';
 import EmpresasPage      from '@/pages/EmpresasPage';
+import ProdutosPage      from '@/pages/ProdutosPage';
 import CatalogosPage     from '@/pages/CatalogosPage';
 import ConfiguracoesPage from '@/pages/ConfiguracoesPage';
-import UsuariosPage      from '@/pages/UsuariosPage';   // ← página de admin
+import UsuariosPage      from '@/pages/UsuariosPage';
 import NotFound          from '@/pages/NotFound';
 
 const App = () => (
@@ -33,9 +34,10 @@ const App = () => (
                 <Route path="/pedidos"       element={<PedidosPage />} />
                 <Route path="/agenda"        element={<AgendaPage />} />
                 <Route path="/empresas"      element={<EmpresasPage />} />
+                <Route path="/produtos"      element={<ProdutosPage />} />
                 <Route path="/catalogos"     element={<CatalogosPage />} />
                 <Route path="/configuracoes" element={<ConfiguracoesPage />} />
-                <Route path="/usuarios"      element={<UsuariosPage />} />  {/* ← ADMIN */}
+                <Route path="/usuarios"      element={<UsuariosPage />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -5,6 +5,12 @@ import type { CreateOrderPayload, OrderStatus } from '@/types';
 
 const KEY = ['orders'] as const;
 
+export interface UpdateStatusPayload {
+  id:      string;
+  status:  OrderStatus;
+  motivo?: string;
+}
+
 export function useOrders(statusFilter?: OrderStatus) {
   const qc = useQueryClient();
 
@@ -20,13 +26,15 @@ export function useOrders(statusFilter?: OrderStatus) {
   });
 
   const update = useMutation({
-    mutationFn: ({ id, ...payload }: { id: string } & CreateOrderPayload) => ordersApi.update(id, payload),
+    mutationFn: ({ id, ...payload }: { id: string } & CreateOrderPayload) =>
+        ordersApi.update(id, payload),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: KEY }); notify.success('Pedido atualizado!'); },
     onError:    (e) => notify.apiError(e, 'Erro ao atualizar pedido.'),
   });
 
   const updateStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: OrderStatus }) => ordersApi.updateStatus(id, status),
+    mutationFn: ({ id, status, motivo }: UpdateStatusPayload) =>
+        ordersApi.updateStatus(id, status, motivo),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: KEY }); notify.success('Status atualizado!'); },
     onError:    (e) => notify.apiError(e, 'Erro ao atualizar status.'),
   });
@@ -38,9 +46,9 @@ export function useOrders(statusFilter?: OrderStatus) {
   });
 
   return {
-    orders:     query.data ?? [],
-    isLoading:  query.isLoading,
-    isError:    query.isError,
+    orders:       query.data ?? [],
+    isLoading:    query.isLoading,
+    isError:      query.isError,
     create,
     update,
     updateStatus,

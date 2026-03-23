@@ -2,7 +2,6 @@ version: "3.9"
 
 services:
 
-  # ── Banco de dados ──────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: venzpro-db
@@ -40,7 +39,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Porta 8080 NÃO é exposta ao host — só acessível internamente pelo nginx
     expose:
       - "8080"
     healthcheck:
@@ -50,18 +48,16 @@ services:
       retries: 5
       start_period: 60s
 
-  # ── Frontend React (nginx) ──────────────────────────────────────────────────
   frontend:
     build:
       context: ./venzpro-frontend
       dockerfile: Dockerfile
       args:
-        # Com proxy nginx, a API fica no mesmo host — sem CORS
         VITE_API_URL: /api
     container_name: venzpro-frontend
     restart: unless-stopped
     ports:
-      - "8080:80"   # Acesse em http://localhost:8080
+      - "8080:80"
     depends_on:
       backend:
         condition: service_healthy
