@@ -16,8 +16,10 @@ export interface User {
   id: string;
   nome: string;
   email: string;
-  role: UserRole;
-  organizationId: string;
+  role: string;
+  podeAprovar: boolean;
+  podeExportar: boolean;
+  podeVerDashboard: boolean;
 }
 
 export interface Company {

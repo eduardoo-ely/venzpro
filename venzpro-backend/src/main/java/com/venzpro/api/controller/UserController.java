@@ -37,12 +37,13 @@ public class UserController {
         return userService.findById(id, principal.organizationId());
     }
 
-    @PatchMapping("/{id}/role")
-    @PreAuthorize("hasRole('ADMIN')")
-    public UserResponse updateRole(@PathVariable UUID id,
-                                   @Valid @RequestBody UpdateUserRoleRequest req,
-                                   @AuthenticationPrincipal VenzproPrincipal principal) {
-        return userService.updateRole(id, principal.organizationId(), req);
+    @PatchMapping("/{id}/access")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public UserResponse updateAccess(
+            @PathVariable UUID id,
+            @jakarta.validation.Valid @RequestBody com.venzpro.application.dto.request.UpdateUserAccessRequest req,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.venzpro.infrastructure.security.VenzproPrincipal principal) {
+        return userService.updateAccess(id, principal.organizationId(), req);
     }
 
     @DeleteMapping("/{id}")

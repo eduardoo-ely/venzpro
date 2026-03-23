@@ -12,6 +12,24 @@ export function useUsers() {
     queryFn:  usersApi.list,
   });
 
+  const updateAccess = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: import('@/api/endpoints').UpdateAccessPayload }) =>
+        usersApi.updateAccess(id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEY });
+      notify.success('Acessos atualizados com sucesso!');
+    },
+    onError: (e) => notify.apiError(e, 'Erro ao atualizar acessos.'),
+  });
+
+  return {
+    users: query.data ?? [],
+    isLoading: query.isLoading,
+    isError: query.isError,
+    updateAccess,
+    remove,
+  };
+
   const updateRole = useMutation({
     mutationFn: ({ id, role }: { id: string; role: string }) => usersApi.updateRole(id, role),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: KEY }); notify.success('Role atualizada!'); },

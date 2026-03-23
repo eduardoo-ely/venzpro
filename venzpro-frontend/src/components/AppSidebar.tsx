@@ -22,15 +22,12 @@ export function AppSidebar() {
 
   const isAdmin = user?.role === 'ADMIN';
 
-  // Badge Pedidos: apenas status ORCAMENTO (em aberto)
   const { orders } = useOrders('ORCAMENTO');
-  const pedidosBadge = orders.length > 0 ? String(orders.length) : null;
+  const pedidosBadge = orders && orders.length > 0 ? String(orders.length) : null;
 
-  // Badge Agenda: eventos com status AGENDADO
   const { events } = useEvents();
-  const agendaBadge = events.filter(e => e.status === 'AGENDADO').length > 0
-      ? String(events.filter(e => e.status === 'AGENDADO').length)
-      : null;
+  const eventosAgendados = events ? events.filter((e: any) => e.status === 'AGENDADO') : [];
+  const agendaBadge = eventosAgendados.length > 0 ? String(eventosAgendados.length) : null;
 
   const items = [
     { title: 'Dashboard',     url: '/',             icon: LayoutDashboard, badge: null         },

@@ -35,6 +35,18 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private UserRole role;
 
+    @Column(name = "pode_aprovar", nullable = false)
+    @Builder.Default
+    private boolean podeAprovar = false;
+
+    @Column(name = "pode_exportar", nullable = false)
+    @Builder.Default
+    private boolean podeExportar = false;
+
+    @Column(name = "pode_ver_dashboard", nullable = false)
+    @Builder.Default
+    private boolean podeVerDashboard = false;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "organization_id", nullable = false)
     private Organization organization;

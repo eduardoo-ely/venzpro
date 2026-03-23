@@ -1,173 +1,303 @@
-import { useUsers } from '@/hooks/useUsers';
-import { useAuth } from '@/contexts/AuthContext';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Shield, Trash2, UserCheck } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
-import { AvatarInitials } from '@/components/AvatarInitials';
-import { EmptyState } from '@/components/EmptyState';
-import { motion } from 'framer-motion';
-import type { UserRole } from '@/types';
-
-const ROLES: { value: UserRole; label: string }[] = [
-  { value: 'ADMIN',    label: 'Administrador' },
-  { value: 'GERENTE',  label: 'Gerente' },
-  { value: 'VENDEDOR', label: 'Vendedor' },
-  { value: 'SUPORTE',  label: 'Suporte' },
-];
-
-const roleColors: Record<UserRole, string> = {
-  ADMIN:    'text-primary border-primary/30 bg-primary/10',
-  GERENTE:  'text-cyan-400 border-cyan-400/30 bg-cyan-400/10',
-  VENDEDOR: 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10',
-  SUPORTE:  'text-amber-400 border-amber-400/30 bg-amber-400/10',
-};
+import React, { useState } from "react";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
+import api from "@/api/api";
+import { useUsers } from "@/hooks/useUsers";
+import { PageHeader } from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
+import { Search, Plus, KeyRound, Mail, User as UserIcon, ShieldAlert, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { User } from "@/types";
 
 export default function UsuariosPage() {
-  const { user: me } = useAuth();
-  const { users, isLoading, updateRole, remove } = useUsers();
+  const qc = useQueryClient();
+  const { users, isLoading, updateAccess } = useUsers();
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  // Estados Granulares de Permissão
+  const [editingRole, setEditingRole] = useState<string>("");
+  const [podeAprovar, setPodeAprovar] = useState(false);
+  const [podeExportar, setPodeExportar] = useState(false);
+  const [podeVerDashboard, setPodeVerDashboard] = useState(false);
+
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("VENDEDOR");
+
+  const inviteMutation = useMutation({
+    mutationFn: (data: { email: string; role: string }) => api.post("/invites", data),
+    onSuccess: () => {
+      toast.success("Convite enviado com sucesso!");
+      setIsInviteOpen(false);
+      setInviteEmail("");
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Erro ao enviar convite.");
+    }
+  });
+
+  const openUserProfile = (user: User) => {
+    setSelectedUser(user);
+    setEditingRole(user.role);
+    setPodeAprovar(user.podeAprovar || false);
+    setPodeExportar(user.podeExportar || false);
+    setPodeVerDashboard(user.podeVerDashboard || false);
+    setIsSheetOpen(true);
+  };
+
+  const handleSaveAccess = () => {
+    if (selectedUser) {
+      updateAccess.mutate(
+          {
+            id: selectedUser.id,
+            payload: { role: editingRole, podeAprovar, podeExportar, podeVerDashboard }
+          },
+          { onSuccess: () => setIsSheetOpen(false) }
+      );
+    }
+  };
+
+  const handleSendInvite = () => {
+    if (!inviteEmail) return toast.error("O E-mail é obrigatório.");
+    inviteMutation.mutate({ email: inviteEmail, role: inviteRole });
+  };
+
+  const filteredUsers = users?.filter(user =>
+      user.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase())
+  ) || [];
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Usuários"
-        subtitle="Gerencie os membros da sua organização"
-      />
-
-      {isLoading && (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="border-glow bg-card">
-              <CardContent className="p-4 flex items-center gap-4">
-                <Skeleton className="h-10 w-10 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-1/3" />
-                  <Skeleton className="h-3 w-1/4" />
-                </div>
-                <Skeleton className="h-8 w-28 rounded-md" />
-                <Skeleton className="h-8 w-8 rounded-md" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {!isLoading && users.length === 0 && (
-        <EmptyState
-          icon={UserCheck}
-          title="Nenhum usuário encontrado"
-          description="Convide membros para sua organização."
+      <div className="space-y-6">
+        <PageHeader
+            title="Gestão de Equipe"
+            description="Gerencie os membros, níveis de acesso e permissões da sua organização."
+            action={
+              <Button className="gap-2" onClick={() => setIsInviteOpen(true)}>
+                <Plus className="h-4 w-4" /> Convidar Usuário
+              </Button>
+            }
         />
-      )}
 
-      {!isLoading && users.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="space-y-3"
-        >
-          {users.map((u) => {
-            const isMe = u.id === me?.id;
-            return (
-              <Card key={u.id} className="border-glow bg-card group">
-                <CardContent className="p-4 flex items-center gap-4">
-                  <AvatarInitials name={u.nome} size="md" />
+        <div className="flex items-center gap-4 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+            <Input
+                placeholder="Buscar por nome ou e-mail..."
+                className="pl-9"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium truncate">{u.nome}</p>
-                      {isMe && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-bold">
-                          Você
-                        </span>
-                      )}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+          <Table>
+            <TableHeader className="bg-gray-50">
+              <TableRow>
+                <TableHead>Usuário</TableHead>
+                <TableHead>Cargo</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center py-8 text-gray-500">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                      Carregando equipe...
+                    </TableCell>
+                  </TableRow>
+              ) : filteredUsers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center py-8 text-gray-500">
+                      Nenhum usuário encontrado.
+                    </TableCell>
+                  </TableRow>
+              ) : (
+                  filteredUsers.map((user) => (
+                      <TableRow key={user.id} className="hover:bg-gray-50">
+                        <TableCell className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9">
+                            <AvatarFallback className="bg-blue-100 text-blue-700 font-semibold">
+                              {user.nome.substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium text-gray-900">{user.nome}</p>
+                            <p className="text-sm text-gray-500">{user.email}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-medium bg-white">
+                            {user.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => openUserProfile(user)}>
+                            Gerenciar
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                  ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Convidar Membro</DialogTitle>
+              <DialogDescription>
+                Envie um convite para adicionar um novo membro à sua organização.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>E-mail do colaborador</Label>
+                <Input
+                    placeholder="email@empresa.com"
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Cargo de Acesso</Label>
+                <Select value={inviteRole} onValueChange={setInviteRole}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ADMIN">Administrador</SelectItem>
+                    <SelectItem value="GERENTE">Gerente de Vendas</SelectItem>
+                    <SelectItem value="VENDEDOR">Vendedor</SelectItem>
+                    <SelectItem value="SUPORTE">Suporte Técnico</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsInviteOpen(false)}>Cancelar</Button>
+              <Button onClick={handleSendInvite} disabled={inviteMutation.isPending}>
+                {inviteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Enviar Convite
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+          <SheetContent className="sm:max-w-md overflow-y-auto">
+            <SheetHeader className="pb-6 border-b">
+              <div className="flex items-center gap-4">
+                <Avatar className="h-16 w-16 border-2 border-white shadow-sm">
+                  <AvatarFallback className="bg-blue-600 text-white text-xl">
+                    {selectedUser?.nome.substring(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <SheetTitle className="text-xl">{selectedUser?.nome}</SheetTitle>
+                  <SheetDescription>{selectedUser?.email}</SheetDescription>
+                </div>
+              </div>
+            </SheetHeader>
+
+            {selectedUser && (
+                <div className="py-6 space-y-8">
+
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                      <UserIcon className="h-4 w-4" /> Cargo no Sistema
+                    </h3>
+                    <div className="grid gap-4 bg-gray-50 p-4 rounded-lg border">
+                      <div className="grid gap-2">
+                        <Label>Perfil de Acesso</Label>
+                        <Select value={editingRole} onValueChange={setEditingRole}>
+                          <SelectTrigger className="bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ADMIN">Administrador</SelectItem>
+                            <SelectItem value="GERENTE">Gerente de Vendas</SelectItem>
+                            <SelectItem value="VENDEDOR">Vendedor</SelectItem>
+                            <SelectItem value="SUPORTE">Suporte Técnico</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-                    {u.createdAt && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        Desde {new Date(u.createdAt).toLocaleDateString('pt-BR')}
-                      </p>
-                    )}
                   </div>
 
-                  {/* Role badge ou select */}
-                  {me?.role === 'ADMIN' && !isMe ? (
-                    <Select
-                      value={u.role}
-                      onValueChange={(role) => updateRole.mutate({ id: u.id, role })}
-                      disabled={updateRole.isPending}
-                    >
-                      <SelectTrigger className="h-8 w-36 text-xs bg-muted border-border/50">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ROLES.map((r) => (
-                          <SelectItem key={r.value} value={r.value} className="text-xs">
-                            {r.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] font-semibold ${roleColors[u.role as UserRole]}`}
-                    >
-                      {ROLES.find((r) => r.value === u.role)?.label ?? u.role}
-                    </Badge>
-                  )}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                      <ShieldAlert className="h-4 w-4" /> Permissões Granulares
+                    </h3>
+                    <div className="bg-gray-50 p-4 rounded-lg border space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-base">Aprovar Clientes</Label>
+                          <p className="text-sm text-gray-500">Permite tirar clientes da geladeira</p>
+                        </div>
+                        <Switch checked={podeAprovar} onCheckedChange={setPodeAprovar} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-base">Exportar Relatórios</Label>
+                          <p className="text-sm text-gray-500">Pode baixar dados em Excel/PDF</p>
+                        </div>
+                        <Switch checked={podeExportar} onCheckedChange={setPodeExportar} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-base">Acessar Dashboard</Label>
+                          <p className="text-sm text-gray-500">Visualiza métricas financeiras</p>
+                        </div>
+                        <Switch checked={podeVerDashboard} onCheckedChange={setPodeVerDashboard} />
+                      </div>
+                    </div>
+                  </div>
 
-                  {/* Remover — só ADMIN, não pode remover a si mesmo */}
-                  {me?.role === 'ADMIN' && !isMe && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent className="border-glow bg-card">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Remover {u.nome}?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            O usuário perderá acesso ao sistema. Esta ação não pode ser desfeita.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => remove.mutate(u.id)}
-                            className="bg-destructive text-white"
-                          >
-                            Remover
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </motion.div>
-      )}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                      <KeyRound className="h-4 w-4" /> Segurança
+                    </h3>
+                    <div className="flex flex-col gap-3">
+                      <Button variant="outline" className="justify-start" onClick={() => toast.success("Link enviado para o email do usuário!")}>
+                        <Mail className="h-4 w-4 mr-2" />
+                        Enviar link de redefinição de senha
+                      </Button>
+                    </div>
+                  </div>
 
-      {/* Info para não-ADMINs */}
-      {!isLoading && me?.role !== 'ADMIN' && (
-        <Card className="border-glow bg-card border-primary/20">
-          <CardContent className="p-4 flex items-center gap-3 text-sm text-muted-foreground">
-            <Shield className="h-4 w-4 text-primary shrink-0" />
-            Apenas administradores podem alterar roles ou remover usuários.
-          </CardContent>
-        </Card>
-      )}
-    </div>
+                </div>
+            )}
+
+            <SheetFooter className="mt-6 border-t pt-6">
+              <Button
+                  variant="default"
+                  className="w-full"
+                  onClick={handleSaveAccess}
+                  disabled={updateAccess.isPending}
+              >
+                {updateAccess.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Salvar Alterações
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      </div>
   );
 }

@@ -4,6 +4,7 @@ import com.venzpro.application.dto.request.UpdateUserRoleRequest;
 import com.venzpro.application.dto.response.UserResponse;
 import com.venzpro.infrastructure.exception.ResourceNotFoundException;
 import com.venzpro.domain.repository.UserRepository;
+import com.venzpro.domain.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,12 +31,21 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("Usuário", id));
     }
 
-    @Transactional
-    public UserResponse updateRole(UUID id, UUID organizationId, UpdateUserRoleRequest req) {
-        var user = userRepository.findByIdAndOrganizationId(id, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário", id));
+    @org.springframework.transaction.annotation.Transactional
+    public com.venzpro.application.dto.response.UserResponse updateAccess(
+            java.util.UUID id,
+            java.util.UUID organizationId,
+            com.venzpro.application.dto.request.UpdateUserAccessRequest req) {
+
+        com.venzpro.domain.entity.User user = userRepository.findByIdAndOrganizationId(id, organizationId)
+                .orElseThrow(() -> new com.venzpro.infrastructure.exception.ResourceNotFoundException("Usuário", id));
+
         user.setRole(req.role());
-        return UserResponse.from(userRepository.save(user));
+        user.setPodeAprovar(req.podeAprovar());
+        user.setPodeExportar(req.podeExportar());
+        user.setPodeVerDashboard(req.podeVerDashboard());
+
+        return com.venzpro.application.dto.response.UserResponse.from(userRepository.save(user));
     }
 
     @Transactional

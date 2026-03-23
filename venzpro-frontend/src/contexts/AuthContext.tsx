@@ -1,118 +1,75 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { User, Organization, OrganizationType, AuthState } from '@/types';
-import { authApi, type RegisterPayload } from '@/api/endpoints';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { AuthResponse } from '@/api/endpoints';
 
-const AuthContext = createContext<AuthState | undefined>(undefined);
+interface AuthContextData {
+  user: AuthResponse['user'] | null;
+  organization: AuthResponse['organization'] | null;
+  token: string | null;
+  login: (data: AuthResponse) => void;
+  logout: () => void;
+  isAuthenticated: boolean;
+}
 
-const TOKEN_KEY = 'venzpro_token';
-const AUTH_KEY  = 'venzpro_auth';
+const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
-interface Stored { user: User; organization: Organization }
-
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser]                   = useState<User | null>(null);
-  const [organization, setOrganization]   = useState<Organization | null>(null);
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthResponse['user'] | null>(null);
+  const [organization, setOrganization] = useState<AuthResponse['organization'] | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token  = localStorage.getItem(TOKEN_KEY);
-    const stored = localStorage.getItem(AUTH_KEY);
-    if (token && stored) {
-      try {
-        const parsed: Stored = JSON.parse(stored);
-        setUser(parsed.user);
-        setOrganization(parsed.organization);
-      } catch {
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(AUTH_KEY);
+    try {
+      const storedToken = localStorage.getItem('@venzpro:token');
+      const storedUser = localStorage.getItem('@venzpro:user');
+      const storedOrg = localStorage.getItem('@venzpro:org');
+
+      if (storedToken && storedUser && storedOrg) {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+        setOrganization(JSON.parse(storedOrg));
       }
+    } catch (error) {
+      console.error('Erro ao recuperar sessão:', error);
+      localStorage.removeItem('@venzpro:token');
+      localStorage.removeItem('@venzpro:user');
+      localStorage.removeItem('@venzpro:org');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  const persist = (token: string, u: User, o: Organization) => {
-    localStorage.setItem(TOKEN_KEY, token);
-    // NÃO salva AUTH_KEY — dados ficam apenas em memória (state React)
-    setUser(u);
-    setOrganization(o);
+  const login = (data: AuthResponse) => {
+    setToken(data.token);
+    setUser(data.user);
+    setOrganization(data.organization);
+
+    localStorage.setItem('@venzpro:token', data.token);
+    localStorage.setItem('@venzpro:user', JSON.stringify(data.user));
+    localStorage.setItem('@venzpro:org', JSON.stringify(data.organization));
   };
 
-// Para restaurar sessão após reload, decodifique o JWT:
-  useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) return;
-
-    try {
-      // Decodifica o payload do JWT (sem verificar assinatura — ok no frontend)
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const now = Math.floor(Date.now() / 1000);
-
-      if (payload.exp < now) {
-        // Token expirado — limpa e não restaura
-        localStorage.removeItem(TOKEN_KEY);
-        return;
-      }
-
-      // Revalida com o backend para garantir que token ainda é válido
-      api.get('/users/me').then(res => {
-        setUser(res.data.user);
-        setOrganization(res.data.organization);
-      }).catch(() => {
-        localStorage.removeItem(TOKEN_KEY);
-      });
-    } catch {
-      localStorage.removeItem(TOKEN_KEY);
-    }
-  }, []);
-
-  const login = useCallback(async (email: string, senha: string) => {
-    const res = await authApi.login({ email, senha });
-    const u: User = {
-      id: res.user.id, nome: res.user.nome, email: res.user.email,
-      role: res.user.role as User['role'], organizationId: res.organization.id,
-    };
-    const o: Organization = {
-      id: res.organization.id, nome: res.organization.nome,
-      tipo: res.organization.tipo as OrganizationType,
-    };
-    persist(res.token, u, o);
-  }, []);
-
-  const register = useCallback(async (
-    nome: string, email: string, senha: string,
-    tipo: OrganizationType, nomeOrganizacao?: string,
-  ) => {
-    const payload: RegisterPayload = {
-      nome, email, senha,
-      nomeOrganizacao: nomeOrganizacao ?? `Organização de ${nome}`,
-      tipoOrganizacao: tipo,
-    };
-    const res = await authApi.register(payload);
-    const u: User = {
-      id: res.user.id, nome: res.user.nome, email: res.user.email,
-      role: res.user.role as User['role'], organizationId: res.organization.id,
-    };
-    const o: Organization = {
-      id: res.organization.id, nome: res.organization.nome,
-      tipo: res.organization.tipo as OrganizationType,
-    };
-    persist(res.token, u, o);
-  }, []);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(AUTH_KEY);
+  const logout = () => {
+    setToken(null);
     setUser(null);
     setOrganization(null);
-  }, []);
+
+    localStorage.removeItem('@venzpro:token');
+    localStorage.removeItem('@venzpro:user');
+    localStorage.removeItem('@venzpro:org');
+
+    window.location.href = '/login';
+  };
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">Carregando sistema...</div>;
+  }
 
   return (
-    <AuthContext.Provider value={{ user, organization, isAuthenticated: !!user, login, register, logout }}>
-      {children}
-    </AuthContext.Provider>
+      <AuthContext.Provider value={{ user, organization, token, login, logout, isAuthenticated: !!token }}>
+        {children}
+      </AuthContext.Provider>
   );
-};
+}
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be inside AuthProvider');
-  return ctx;
-};
+export const useAuth = () => useContext(AuthContext);

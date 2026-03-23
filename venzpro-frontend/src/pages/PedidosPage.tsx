@@ -1,573 +1,178 @@
-import { useState } from 'react';
-import { useOrders } from '@/hooks/useOrders';
-import { useCustomers } from '@/hooks/useCustomers';
-import { useCompanies } from '@/hooks/useCompanies';
-import { useProducts } from '@/hooks/useProducts';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Plus, Pencil, Trash2, LayoutGrid, List, Package, GripVertical, Lock } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
-import { EmptyState } from '@/components/EmptyState';
-import { AvatarInitials } from '@/components/AvatarInitials';
-import { motion } from 'framer-motion';
-import type { CreateOrderPayload, Order, OrderStatus } from '@/types';
+import React, { useState } from "react";
+import { useOrders } from "@/hooks/useOrders";
+import { PageHeader } from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Search, Plus, FileText, Eye, Loader2, Filter } from "lucide-react";
+import { NovoPedidoSheet } from "@/components/NovoPedidoSheet";
 
-// ── Configuração visual dos status ────────────────────────────────────────────
-
-const statusConfig: Record<OrderStatus, { label: string; class: string; color: string }> = {
-  ORCAMENTO: { label: 'Orçamento', class: 'status-orcamento', color: 'hsl(38 92% 50%)'  },
-  ENVIADO:   { label: 'Enviado',   class: 'status-enviado',   color: 'hsl(217 91% 60%)' },
-  APROVADO:  { label: 'Aprovado',  class: 'status-aprovado',  color: 'hsl(160 84% 39%)' },
-  REJEITADO: { label: 'Rejeitado', class: 'status-rejeitado', color: 'hsl(0 72% 51%)'   },
-  CONCLUIDO: { label: 'Concluído', class: 'status-concluido', color: 'hsl(142 71% 45%)' },
-  CANCELADO: { label: 'Cancelado', class: 'status-cancelado', color: 'hsl(0 84% 60%)'   },
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case "ORCAMENTO": return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "ENVIADO": return "bg-blue-100 text-blue-800 border-blue-200";
+    case "APROVADO": return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    case "CONCLUIDO": return "bg-purple-100 text-purple-800 border-purple-200";
+    case "REJEITADO": return "bg-red-100 text-red-800 border-red-200";
+    case "CANCELADO": return "bg-gray-100 text-gray-800 border-gray-200";
+    default: return "bg-gray-100 text-gray-800";
+  }
 };
 
-// ── Mapa de transições válidas — espelha o backend ────────────────────────────
-
-const TRANSICOES_VALIDAS: Record<OrderStatus, OrderStatus[]> = {
-  ORCAMENTO: ['ENVIADO', 'CANCELADO'],
-  ENVIADO:   ['APROVADO', 'REJEITADO', 'CANCELADO'],
-  APROVADO:  ['CONCLUIDO', 'CANCELADO'],
-  REJEITADO: [],
-  CONCLUIDO: [],
-  CANCELADO: [],
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 };
 
-// Label humanizado das ações de transição
-const ACAO_LABEL: Partial<Record<OrderStatus, string>> = {
-  ENVIADO:   'Enviar',
-  APROVADO:  'Aprovar',
-  REJEITADO: 'Rejeitar',
-  CONCLUIDO: 'Concluir',
-  CANCELADO: 'Cancelar',
+const formatDate = (dateString: string) => {
+  if (!dateString) return "-";
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  }).format(new Date(dateString));
 };
-
-// Classe de cor de cada ação
-const ACAO_CLASS: Partial<Record<OrderStatus, string>> = {
-  ENVIADO:   'text-[hsl(217,91%,60%)]',
-  APROVADO:  'text-[hsl(160,84%,39%)]',
-  REJEITADO: 'text-[hsl(0,72%,51%)]',
-  CONCLUIDO: 'text-[hsl(142,71%,45%)]',
-  CANCELADO: 'text-destructive',
-};
-
-// ── Tipos internos ────────────────────────────────────────────────────────────
-
-// ▶ Novo: tipo para item individual no formulário
-type ItemForm = { productId: string; quantidade: string };
-
-type Form = {
-  customerId: string;
-  companyId:  string;
-  descricao:  string;
-  items:      ItemForm[]; // ▶ substituiu productId + quantidade
-};
-
-type CancelacaoState = {
-  open:    boolean;
-  orderId: string | null;
-  motivo:  string;
-};
-
-// ▶ Atualizado: estado inicial com array de itens
-const emptyForm = (): Form => ({
-  customerId: '',
-  companyId:  '',
-  descricao:  '',
-  items: [{ productId: '', quantidade: '1' }],
-});
-
-// ── Componente principal ──────────────────────────────────────────────────────
 
 export default function PedidosPage() {
-  const { orders, isLoading, create, update, updateStatus, remove } = useOrders();
-  const { customers, isLoading: loadingC }  = useCustomers();
-  const { companies, isLoading: loadingCo } = useCompanies();
-  const { products,  isLoading: loadingP }  = useProducts();
+  const { orders, isLoading } = useOrders();
 
-  const [open,       setOpen]       = useState(false);
-  const [editing,    setEditing]    = useState<Order | null>(null);
-  const [viewMode,   setViewMode]   = useState<'kanban' | 'table'>('kanban');
-  const [form,       setForm]       = useState<Form>(emptyForm());
-  const [cancelacao, setCancelacao] = useState<CancelacaoState>({
-    open: false, orderId: null, motivo: '',
-  });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("TODOS");
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // Estado para controlar a abertura do Carrinho
+  const [isNovoPedidoOpen, setIsNovoPedidoOpen] = useState(false);
 
-  /** Pedido pode ser editado apenas em ORCAMENTO */
-  const podeEditar = (order: Order) => order.status === 'ORCAMENTO';
+  const filteredOrders = orders?.filter(order => {
+    const matchesSearch =
+        order.customer?.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.id.toLowerCase().includes(searchTerm.toLowerCase());
 
-  // ── Handlers — itens do formulário ───────────────────────────────────────────
+    const matchesStatus = statusFilter === "TODOS" || order.status === statusFilter;
 
-  // ▶ Adiciona uma linha em branco
-  const addItem = () =>
-      setForm(f => ({ ...f, items: [...f.items, { productId: '', quantidade: '1' }] }));
-
-  // ▶ Remove a linha pelo índice (mínimo 1 item sempre)
-  const removeItem = (index: number) =>
-      setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== index) }));
-
-  // ▶ Atualiza campo de uma linha específica
-  const updateItem = (index: number, field: keyof ItemForm, value: string) =>
-      setForm(f => ({
-        ...f,
-        items: f.items.map((item, i) => i === index ? { ...item, [field]: value } : item),
-      }));
-
-  // ── Handlers — formulário ────────────────────────────────────────────────────
-
-  const openNew = () => { setEditing(null); setForm(emptyForm()); setOpen(true); };
-
-  const openEdit = (order: Order) => {
-    if (!podeEditar(order)) return;
-    setEditing(order);
-    setForm({
-      customerId: order.customerId,
-      companyId:  order.companyId,
-      descricao:  order.descricao ?? '',
-      // ▶ Mapeia todos os itens existentes (não só o primeiro)
-      items: order.items.length > 0
-          ? order.items.map(it => ({
-            productId: it.productId,
-            quantidade: String(it.quantidade),
-          }))
-          : [{ productId: '', quantidade: '1' }],
-    });
-    setOpen(true);
-  };
-
-  // ▶ handleSubmit atualizado para usar o array de itens
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const payload: CreateOrderPayload = {
-      customerId: form.customerId,
-      companyId:  form.companyId,
-      descricao:  form.descricao || undefined,
-      items: form.items
-          .filter(i => i.productId && Number(i.quantidade) > 0)
-          .map(i => ({ productId: i.productId, quantidade: Number(i.quantidade) })),
-    };
-    if (editing) await update.mutateAsync({ id: editing.id, ...payload });
-    else         await create.mutateAsync(payload);
-    setOpen(false);
-  };
-
-  // ── Handlers — status ────────────────────────────────────────────────────────
-
-  const handleTransicao = (order: Order, novoStatus: OrderStatus) => {
-    if (novoStatus === 'CANCELADO' && order.status === 'APROVADO') {
-      setCancelacao({ open: true, orderId: order.id, motivo: '' });
-      return;
-    }
-    updateStatus.mutate({ id: order.id, status: novoStatus });
-  };
-
-  const handleConfirmarCancelamento = () => {
-    if (!cancelacao.orderId) return;
-    updateStatus.mutate({ id: cancelacao.orderId, status: 'CANCELADO', motivo: cancelacao.motivo });
-    setCancelacao({ open: false, orderId: null, motivo: '' });
-  };
-
-  // ▶ Formulário válido: pelo menos 1 item com produto selecionado
-  const formValido =
-      !!form.customerId &&
-      !!form.companyId &&
-      form.items.some(i => i.productId && Number(i.quantidade) > 0);
-
-  const isPending    = create.isPending || update.isPending;
-  const isLoadingAll = isLoading || loadingC || loadingCo || loadingP;
-  const columns: OrderStatus[] = ['ORCAMENTO', 'ENVIADO', 'APROVADO', 'REJEITADO', 'CONCLUIDO', 'CANCELADO'];
-
-  // ── Sub-componente: botão de edição com tooltip quando bloqueado ─────────────
-
-  const BotaoEditar = ({ order, variant }: { order: Order; variant: 'icon' | 'sm' }) => {
-    const pode = podeEditar(order);
-    const btn = variant === 'icon'
-        ? (
-            <Button variant="ghost" size="icon"
-                    className={`h-8 w-8 ${!pode ? 'opacity-40 cursor-not-allowed' : ''}`}
-                    onClick={() => pode && openEdit(order)}
-                    disabled={!pode}
-            >
-              {pode ? <Pencil className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-            </Button>
-        ) : (
-            <Button variant="ghost" size="sm"
-                    className={`text-xs h-7 ${!pode ? 'opacity-40 cursor-not-allowed' : ''}`}
-                    onClick={() => pode && openEdit(order)}
-                    disabled={!pode}
-            >
-              {pode
-                  ? <><Pencil className="h-3 w-3 mr-1" />Editar</>
-                  : <><Lock   className="h-3 w-3 mr-1" />Bloqueado</>
-              }
-            </Button>
-        );
-
-    if (pode) return btn;
-
-    return (
-        <Tooltip>
-          <TooltipTrigger asChild>{btn}</TooltipTrigger>
-          <TooltipContent side="top" className="text-xs max-w-[200px] text-center">
-            Apenas pedidos em Orçamento podem ser editados.<br />
-            Status atual: {statusConfig[order.status].label}
-          </TooltipContent>
-        </Tooltip>
-    );
-  };
-
-  // ── Sub-componente: ações de transição do kanban ─────────────────────────────
-
-  const AcoesKanban = ({ order }: { order: Order }) => {
-    const proximos = TRANSICOES_VALIDAS[order.status];
-    if (!proximos.length) return null;
-    return (
-        <div className="flex gap-1 mt-3 flex-wrap opacity-0 group-hover:opacity-100 transition-opacity">
-          {proximos.map(novoStatus => (
-              <Button key={novoStatus} size="sm" variant="ghost"
-                      className={`h-6 text-[10px] ${ACAO_CLASS[novoStatus] ?? ''}`}
-                      disabled={updateStatus.isPending}
-                      onClick={e => { e.stopPropagation(); handleTransicao(order, novoStatus); }}
-              >
-                {ACAO_LABEL[novoStatus]}
-              </Button>
-          ))}
-        </div>
-    );
-  };
-
-  // ── JSX principal ─────────────────────────────────────────────────────────────
+    return matchesSearch && matchesStatus;
+  }) || [];
 
   return (
       <div className="space-y-6">
-        <PageHeader title="Pedidos" subtitle="Gerencie seus pedidos e orçamentos">
-          <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
-            <Button variant={viewMode === 'kanban' ? 'default' : 'ghost'} size="icon"
-                    className={`h-8 w-8 ${viewMode === 'kanban' ? 'gradient-primary border-0' : ''}`}
-                    onClick={() => setViewMode('kanban')}><LayoutGrid className="h-4 w-4" /></Button>
-            <Button variant={viewMode === 'table' ? 'default' : 'ghost'} size="icon"
-                    className={`h-8 w-8 ${viewMode === 'table' ? 'gradient-primary border-0' : ''}`}
-                    onClick={() => setViewMode('table')}><List className="h-4 w-4" /></Button>
-          </div>
-          <Button onClick={openNew} className="gradient-primary border-0 text-white shadow-lg shadow-primary/25">
-            <Plus className="h-4 w-4 mr-2" />Novo Pedido
-          </Button>
-        </PageHeader>
-
-        {isLoadingAll && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                  <Card key={i} className="border-glow bg-card">
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Skeleton className="h-8 w-8 rounded-full" />
-                        <div className="space-y-1 flex-1">
-                          <Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" />
-                        </div>
-                      </div>
-                      <Skeleton className="h-6 w-1/3" />
-                    </CardContent>
-                  </Card>
-              ))}
-            </div>
-        )}
-
-        {!isLoadingAll && orders.length === 0 && (
-            <EmptyState icon={Package} title="Nenhum pedido encontrado"
-                        description="Crie seu primeiro pedido para começar a gerenciar suas vendas."
-                        actionLabel="Novo Pedido" onAction={openNew} />
-        )}
-
-        {/* Modo kanban */}
-        {!isLoadingAll && orders.length > 0 && viewMode === 'kanban' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {columns.map(col => {
-                const colOrders = orders.filter(o => o.status === col);
-                const cfg = statusConfig[col];
-                return (
-                    <div key={col} className="flex flex-col">
-                      <div className="flex items-center justify-between mb-3 px-1">
-                        <div className="flex items-center gap-2">
-                          <div className="h-2.5 w-2.5 rounded-full" style={{ background: cfg.color }} />
-                          <span className="text-sm font-semibold">{cfg.label}</span>
-                          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                      {colOrders.length}
-                    </span>
-                        </div>
-                        {col === 'ORCAMENTO' && (
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={openNew}>
-                              <Plus className="h-3.5 w-3.5" />
-                            </Button>
-                        )}
-                      </div>
-                      <div className="space-y-2 flex-1">
-                        {colOrders.map(order => (
-                            <motion.div key={order.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                              <Card
-                                  className={`border-glow bg-card group ${podeEditar(order) ? 'cursor-pointer' : 'cursor-default'}`}
-                                  onClick={() => podeEditar(order) && openEdit(order)}
-                              >
-                                <CardContent className="p-4">
-                                  <div className="flex items-start justify-between mb-2">
-                                    <div className="flex items-center gap-2">
-                                      <AvatarInitials name={order.clienteNome || 'C'} size="sm" />
-                                      <div>
-                                        <p className="text-sm font-medium">{order.clienteNome || order.customerId}</p>
-                                        <p className="text-[10px] text-muted-foreground">{order.empresaNome || order.companyId}</p>
-                                      </div>
-                                    </div>
-                                    {!podeEditar(order)
-                                        ? <Lock className="h-3.5 w-3.5 text-muted-foreground/40" />
-                                        : <GripVertical className="h-4 w-4 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    }
-                                  </div>
-                                  <div className="space-y-1 mt-3">
-                            <span className="text-lg font-bold">
-                              R$ {Number(order.valorTotal).toFixed(2)}
-                            </span>
-                                    <p className="text-[10px] text-muted-foreground">{order.items.length} item(ns)</p>
-                                    <span className="text-[10px] text-muted-foreground block">
-                              {order.createdAt ? new Date(order.createdAt).toLocaleDateString('pt-BR') : ''}
-                            </span>
-                                  </div>
-                                  <AcoesKanban order={order} />
-                                </CardContent>
-                              </Card>
-                            </motion.div>
-                        ))}
-                      </div>
-                    </div>
-                );
-              })}
-            </div>
-        )}
-
-        {/* Modo tabela */}
-        {!isLoadingAll && orders.length > 0 && viewMode === 'table' && (
-            <Card className="border-glow bg-card">
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-border/30 hover:bg-transparent">
-                      <TableHead className="text-xs text-muted-foreground">Cliente</TableHead>
-                      <TableHead className="text-xs text-muted-foreground">Empresa</TableHead>
-                      <TableHead className="text-xs text-muted-foreground">Itens</TableHead>
-                      <TableHead className="text-xs text-muted-foreground">Valor</TableHead>
-                      <TableHead className="text-xs text-muted-foreground">Status</TableHead>
-                      <TableHead className="text-xs text-muted-foreground">Data</TableHead>
-                      <TableHead className="text-xs text-muted-foreground w-32">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orders.map(order => (
-                        <TableRow key={order.id} className="border-border/20 hover:bg-primary/5 transition-colors">
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <AvatarInitials name={order.clienteNome || 'C'} size="sm" />
-                              <span className="text-sm font-medium">{order.clienteNome || order.customerId}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {order.empresaNome || order.companyId}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{order.items.length}</TableCell>
-                          <TableCell className="text-sm font-medium">
-                            R$ {Number(order.valorTotal).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline"
-                                   className={`${statusConfig[order.status].class} text-[10px] font-semibold`}>
-                              {statusConfig[order.status].label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {order.createdAt ? new Date(order.createdAt).toLocaleDateString('pt-BR') : '-'}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1 items-center">
-                              {TRANSICOES_VALIDAS[order.status].slice(0, 2).map(novoStatus => (
-                                  <Button key={novoStatus} variant="ghost" size="icon"
-                                          className={`h-7 w-7 ${ACAO_CLASS[novoStatus] ?? ''}`}
-                                          title={ACAO_LABEL[novoStatus]}
-                                          disabled={updateStatus.isPending}
-                                          onClick={() => handleTransicao(order, novoStatus)}
-                                  >
-                            <span className="text-[9px] font-bold">
-                              {ACAO_LABEL[novoStatus]?.charAt(0)}
-                            </span>
-                                  </Button>
-                              ))}
-                              <BotaoEditar order={order} variant="icon" />
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent className="border-glow bg-card">
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Excluir pedido?</AlertDialogTitle>
-                                    <AlertDialogDescription>Não pode ser desfeito.</AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => remove.mutate(order.id)}
-                                                       className="bg-destructive text-white">
-                                      Excluir
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-        )}
-
-        {/* Modal — criar / editar pedido */}
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="border-glow bg-card">
-            <DialogHeader>
-              <DialogTitle>{editing ? 'Editar Pedido' : 'Novo Pedido'}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Cliente + Empresa */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Cliente *</Label>
-                  <Select value={form.customerId}
-                          onValueChange={v => setForm(f => ({ ...f, customerId: v }))}>
-                    <SelectTrigger className="bg-muted border-border/50"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Empresa *</Label>
-                  <Select value={form.companyId}
-                          onValueChange={v => setForm(f => ({ ...f, companyId: v }))}>
-                    <SelectTrigger className="bg-muted border-border/50"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* ▶ Lista dinâmica de itens (substitui os 2 campos fixos anteriores) */}
-              <div className="space-y-2">
-                {form.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-[1fr_120px_40px] gap-2 items-end">
-                      <div className="space-y-2">
-                        {index === 0 && <Label>Produto *</Label>}
-                        <Select value={item.productId}
-                                onValueChange={v => updateItem(index, 'productId', v)}>
-                          <SelectTrigger className="bg-muted border-border/50">
-                            <SelectValue placeholder="Selecione um produto" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {products.map(p => (
-                                <SelectItem key={p.id} value={p.id}>
-                                  {p.nome}
-                                </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        {index === 0 && <Label>Qtd *</Label>}
-                        <Input type="number" step="0.001" min="0.001"
-                               value={item.quantidade}
-                               onChange={e => updateItem(index, 'quantidade', e.target.value)}
-                               className="bg-muted border-border/50" />
-                      </div>
-                      <Button type="button" variant="ghost" size="icon"
-                              className="h-10 w-10 text-destructive"
-                              onClick={() => removeItem(index)}
-                              disabled={form.items.length === 1}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                ))}
-                <Button type="button" variant="outline" size="sm"
-                        className="w-full border-dashed" onClick={addItem}>
-                  <Plus className="h-4 w-4 mr-2" />Adicionar Item
-                </Button>
-              </div>
-
-              {/* Descrição */}
-              <div className="space-y-2">
-                <Label>Descrição</Label>
-                <Textarea value={form.descricao}
-                          onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
-                          className="bg-muted border-border/50" rows={3} />
-              </div>
-
-              <Button type="submit"
-                      className="w-full gradient-primary border-0 text-white"
-                      disabled={isPending || !formValido}>
-                {isPending ? 'Salvando...' : editing ? 'Salvar' : 'Criar Pedido'}
+        <PageHeader
+            title="Central de Pedidos"
+            description="Acompanhe orçamentos, vendas enviadas e histórico de faturação."
+            action={
+              <Button className="gap-2" onClick={() => setIsNovoPedidoOpen(true)}>
+                <Plus className="h-4 w-4" /> Novo Pedido
               </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+            }
+        />
 
-        {/* Modal — motivo de cancelamento (obrigatório para pedidos APROVADOS) */}
-        <Dialog open={cancelacao.open}
-                onOpenChange={o => setCancelacao(s => ({ ...s, open: o }))}>
-          <DialogContent className="border-glow bg-card">
-            <DialogHeader>
-              <DialogTitle>Cancelar pedido</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Este pedido está <strong>Aprovado</strong>. Para cancelá-lo é necessário
-                informar o motivo.
-              </p>
-              <div className="space-y-2">
-                <Label>Motivo do cancelamento *</Label>
-                <Textarea
-                    value={cancelacao.motivo}
-                    onChange={e => setCancelacao(s => ({ ...s, motivo: e.target.value }))}
-                    placeholder="Descreva o motivo do cancelamento..."
-                    className="bg-muted border-border/50"
-                    rows={4}
-                />
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline"
-                        onClick={() => setCancelacao({ open: false, orderId: null, motivo: '' })}>
-                  Voltar
-                </Button>
-                <Button
-                    className="bg-destructive text-white hover:bg-destructive/90"
-                    disabled={!cancelacao.motivo.trim() || updateStatus.isPending}
-                    onClick={handleConfirmarCancelamento}
-                >
-                  {updateStatus.isPending ? 'Cancelando...' : 'Confirmar cancelamento'}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+          <div className="relative flex-1 w-full">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+            <Input
+                placeholder="Pesquisar por cliente ou código do pedido..."
+                className="pl-9"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="w-full sm:w-64 flex items-center gap-2">
+            <Filter className="h-4 w-4 text-gray-500" />
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="bg-white">
+                <SelectValue placeholder="Filtrar por Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="TODOS">Todos os Status</SelectItem>
+                <SelectItem value="ORCAMENTO">Orçamento</SelectItem>
+                <SelectItem value="ENVIADO">Enviado ao Cliente</SelectItem>
+                <SelectItem value="APROVADO">Aprovado</SelectItem>
+                <SelectItem value="CONCLUIDO">Concluído / Faturado</SelectItem>
+                <SelectItem value="REJEITADO">Rejeitado</SelectItem>
+                <SelectItem value="CANCELADO">Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+          <Table>
+            <TableHeader className="bg-gray-50">
+              <TableRow>
+                <TableHead>Data & Código</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Vendedor</TableHead>
+                <TableHead>Valor Total</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                      A carregar pedidos...
+                    </TableCell>
+                  </TableRow>
+              ) : filteredOrders.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                      Nenhum pedido encontrado com estes filtros.
+                    </TableCell>
+                  </TableRow>
+              ) : (
+                  filteredOrders.map((order) => (
+                      <TableRow key={order.id} className="hover:bg-gray-50">
+                        <TableCell>
+                          <div className="font-medium text-gray-900">
+                            {formatDate(order.createdAt)}
+                          </div>
+                          <div className="text-xs text-gray-500 uppercase">
+                            #{order.id.substring(0, 8)}
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <p className="font-medium text-gray-900">{order.customer?.nome || "Cliente Removido"}</p>
+                          <p className="text-xs text-gray-500">{order.company?.nome || "Empresa Padrão"}</p>
+                        </TableCell>
+
+                        <TableCell>
+                          <div className="text-sm text-gray-700">{order.user?.nome || "-"}</div>
+                        </TableCell>
+
+                        <TableCell>
+                          <div className="font-bold text-gray-900">
+                            {formatCurrency(order.valorTotal)}
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <Badge className={`font-semibold ${getStatusColor(order.status)}`}>
+                            {order.status}
+                          </Badge>
+                        </TableCell>
+
+                        <TableCell className="text-right space-x-2">
+                          <Button variant="ghost" size="icon" title="Ver Orçamento em PDF">
+                            <FileText className="h-4 w-4 text-gray-500" />
+                          </Button>
+                          <Button variant="outline" size="sm">
+                            <Eye className="h-4 w-4 mr-2" />
+                            Detalhes
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                  ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <NovoPedidoSheet
+            isOpen={isNovoPedidoOpen}
+            onClose={() => setIsNovoPedidoOpen(false)}
+        />
+
       </div>
   );
 }

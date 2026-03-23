@@ -37,7 +37,8 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.email())
+        String emailPadronizado = request.email().toLowerCase().trim();
+        User user = userRepository.findByEmail(emailPadronizado)
                 .orElseThrow(() -> new BadCredentialsException("Credenciais inválidas"));
 
         if (!passwordEncoder.matches(request.senha(), user.getSenha())) {
@@ -67,7 +68,9 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
+        String emailPadronizado = request.email().toLowerCase().trim();
+
+        if (userRepository.existsByEmail(emailPadronizado)) {
             throw new BusinessException("Este email já está em uso.");
         }
 

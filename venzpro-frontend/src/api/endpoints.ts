@@ -24,11 +24,19 @@ export const authApi = {
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 
+export interface UpdateAccessPayload {
+  role: string;
+  podeAprovar: boolean;
+  podeExportar: boolean;
+  podeVerDashboard: boolean;
+}
+
+
 export const usersApi = {
-  list:       ()                           => api.get<User[]>('/users').then(r => r.data),
-  get:        (id: string)                 => api.get<User>(`/users/${id}`).then(r => r.data),
-  updateRole: (id: string, role: string)   => api.patch<User>(`/users/${id}/role`, { role }).then(r => r.data),
-  remove:     (id: string)                 => api.delete(`/users/${id}`).then(r => r.data),
+  list:         () => api.get<User[]>('/users').then(r => r.data),
+  get:          (id: string) => api.get<User>(`/users/${id}`).then(r => r.data),
+  updateAccess: (id: string, d: UpdateAccessPayload) => api.patch<User>(`/users/${id}/access`, d).then(r => r.data),
+  remove:       (id: string) => api.delete(`/users/${id}`).then(r => r.data),
 };
 
 // ── Companies ─────────────────────────────────────────────────────────────────

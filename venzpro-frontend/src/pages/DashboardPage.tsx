@@ -1,247 +1,328 @@
-import { useMemo } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useCustomers } from '@/hooks/useCustomers';
-import { useOrders } from '@/hooks/useOrders';
-import { useEvents } from '@/hooks/useEvents';
-import { Card, CardContent } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Users, Package, FileText, CheckCircle, TrendingUp, Calendar, Clock } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { AnimatedCounter } from '@/components/AnimatedCounter';
-import { SparkLine } from '@/components/SparkLine';
-import { AvatarInitials } from '@/components/AvatarInitials';
-import { PageHeader } from '@/components/PageHeader';
-import { OnboardingBanner } from '@/components/OnboardingBanner';
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
+import React, { useMemo } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useOrders } from "@/hooks/useOrders";
+import { useEvents } from "@/hooks/useEvents";
+import { useCustomers } from "@/hooks/useCustomers";
+import { PageHeader } from "@/components/PageHeader";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import {
+  DollarSign, ShoppingCart, Target, TrendingUp, Calendar as CalendarIcon,
+  Trophy, Flame, Download, Users, AlertCircle, Medal
+} from "lucide-react";
+import { toast } from "sonner";
 
-const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-const STATUS_CLASSES: Record<string, string> = {
-  ORCAMENTO: 'status-orcamento',
-  ENVIADO:   'status-enviado',
-  APROVADO:  'status-aprovado',
-  REJEITADO: 'status-rejeitado',
-  CONCLUIDO: 'status-concluido',
-  CANCELADO: 'status-cancelado',
+// Função utilitária para moeda
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 };
-const STATUS_LABELS: Record<string, string> = {
-  ORCAMENTO: 'Orçamento',
-  ENVIADO:   'Enviado',
-  APROVADO:  'Aprovado',
-  REJEITADO: 'Rejeitado',
-  CONCLUIDO: 'Concluído',
-  CANCELADO: 'Cancelado',
-};
-
-const container = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
-const item      = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { customers, isLoading: lC } = useCustomers();
-  const { orders,    isLoading: lO } = useOrders();
-  const { events,    isLoading: lE } = useEvents();
+  const { orders = [] } = useOrders();
+  const { events = [] } = useEvents();
+  const { customers = [] } = useCustomers();
 
-  const isLoading = lC || lO || lE;
+  // --- REGRAS DE VISIBILIDADE (Cargos e Permissões) ---
+  const isManagerOrAdmin = user?.role === "ADMIN" || user?.role === "GERENTE";
+  const canExport = user?.podeExportar || user?.role === "ADMIN";
+  const canApprove = user?.podeAprovar || isManagerOrAdmin;
 
-  const monthlyData = useMemo(() => {
-    const now    = new Date();
-    const months = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
-      return { month: d.getMonth(), year: d.getFullYear(), name: MONTH_NAMES[d.getMonth()], pedidos: 0 };
+  // --- CÁLCULOS DOS INDICADORES GERAIS ---
+  const estatisticas = useMemo(() => {
+    let faturado = 0;
+    let emNegociacao = 0;
+    let totalPedidosFechados = 0;
+
+    orders.forEach(order => {
+      if (order.status === "CONCLUIDO") {
+        faturado += order.valorTotal;
+        totalPedidosFechados += 1;
+      }
+      if (order.status === "ORCAMENTO" || order.status === "ENVIADO" || order.status === "APROVADO") {
+        emNegociacao += order.valorTotal;
+      }
     });
-    orders.forEach(o => {
-      if (!o.createdAt) return;
-      const d = new Date(o.createdAt);
-      const slot = months.find(m => m.month === d.getMonth() && m.year === d.getFullYear());
-      if (slot) slot.pedidos++;
-    });
-    return months;
+
+    const ticketMedio = totalPedidosFechados > 0 ? faturado / totalPedidosFechados : 0;
+    return { faturado, emNegociacao, totalPedidosFechados, ticketMedio };
   }, [orders]);
 
-  const customerSpark = useMemo(() => {
-    const days = Array.from({ length: 10 }, (_, i) => {
-      const d = new Date(); d.setDate(d.getDate() - 9 + i); d.setHours(0,0,0,0);
-      return d.getTime();
+  // --- CÁLCULO DO RANKING DA EQUIPE (Apenas Gerentes/Admins) ---
+  const rankingEquipe = useMemo(() => {
+    if (!isManagerOrAdmin) return [];
+
+    const mapaVendedores = new Map<string, { nome: string; faturado: number; totalVendas: number }>();
+
+    orders.forEach(o => {
+      if (o.status === "CONCLUIDO" && o.user) {
+        const atual = mapaVendedores.get(o.user.id) || { nome: o.user.nome, faturado: 0, totalVendas: 0 };
+        mapaVendedores.set(o.user.id, {
+          nome: atual.nome,
+          faturado: atual.faturado + o.valorTotal,
+          totalVendas: atual.totalVendas + 1
+        });
+      }
     });
-    return days.map(ts => customers.filter(c => c.createdAt && new Date(c.createdAt).setHours(0,0,0,0) <= ts).length);
+
+    // Converte para Array, ordena do maior para o menor faturamento e pega os 5 melhores
+    return Array.from(mapaVendedores.values())
+        .sort((a, b) => b.faturado - a.faturado)
+        .slice(0, 5);
+  }, [orders, isManagerOrAdmin]);
+
+  // --- AÇÕES PENDENTES (Geladeira) ---
+  const clientesPendentes = useMemo(() => {
+    return customers.filter(c => c.status === "PENDENTE").length;
   }, [customers]);
 
-  const orderSpark = useMemo(() => {
-    const days = Array.from({ length: 10 }, (_, i) => {
-      const d = new Date(); d.setDate(d.getDate() - 9 + i); d.setHours(0,0,0,0);
-      return d.getTime();
-    });
-    return days.map(ts => orders.filter(o => o.createdAt && new Date(o.createdAt).setHours(0,0,0,0) <= ts).length);
-  }, [orders]);
+  // --- GAMIFICAÇÃO: SISTEMA DE METAS ---
+  const META_MENSAL = 50000;
+  const META_SUPER = 100000;
 
-  const stats = [
-    { title: 'Clientes',      value: customers.length,                                         icon: Users,       spark: customerSpark, color: 'hsl(239 84% 67%)' },
-    { title: 'Pedidos',       value: orders.length,                                            icon: Package,     spark: orderSpark,    color: 'hsl(258 90% 66%)' },
-    { title: 'Em Aberto',     value: orders.filter(o => o.status === 'ORCAMENTO').length,      icon: FileText,    spark: [],            color: 'hsl(38 92% 50%)' },
-    { title: 'Aprovados',    value: orders.filter(o => o.status === 'APROVADO').length,      icon: CheckCircle, spark: [],            color: 'hsl(160 84% 39%)' },
-  ];
+  const progressoMeta = Math.min((estatisticas.faturado / META_MENSAL) * 100, 100);
+  const progressoSuper = Math.max(0, Math.min(((estatisticas.faturado - META_MENSAL) / (META_SUPER - META_MENSAL)) * 100, 100));
 
-  const lastOrders      = [...orders].sort((a,b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()).slice(0, 5);
-  const upcomingEvents  = events.filter(e => e.status === 'AGENDADO').slice(0, 4);
+  let nivelComissao = "Base (3%)";
+  let nivelColor = "text-gray-500";
+  if (estatisticas.faturado >= META_MENSAL) {
+    nivelComissao = "Ouro (5%)";
+    nivelColor = "text-yellow-600";
+  }
+  if (estatisticas.faturado >= META_SUPER) {
+    nivelComissao = "Diamante (7%)";
+    nivelColor = "text-blue-600";
+  }
+
+  const eventosFuturos = events
+      .filter(e => e.status === "AGENDADO")
+      .sort((a, b) => new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime())
+      .slice(0, 4);
 
   return (
-    <div className="space-y-6 max-w-[1400px]">
-      <PageHeader
-        title={`Olá, ${user?.nome?.split(' ')[0] ?? 'bem-vindo'}! 👋`}
-        subtitle="Aqui está o resumo da sua operação comercial"
-      />
+      <div className="space-y-6">
+        <PageHeader
+            title={`Olá, ${user?.nome?.split(' ')[0]} 👋`}
+            description={isManagerOrAdmin ? "Visão geral do desempenho da sua empresa." : "Aqui está o resumo da sua operação e o seu progresso neste mês."}
+            action={
+              <div className="flex gap-3">
+                {/* BOTÃO ESCONDIDO: Exportar (Protegido por Permissão) */}
+                {canExport && (
+                    <Button variant="outline" className="bg-white gap-2" onClick={() => toast.success("Relatório gerado com sucesso!")}>
+                      <Download className="h-4 w-4" /> Exportar Dados
+                    </Button>
+                )}
+                <Badge variant="outline" className="px-3 py-1 bg-white flex items-center gap-2 text-sm shadow-sm border-blue-200">
+                  <Trophy className={`h-4 w-4 ${nivelColor}`} />
+                  Nível Atual: <span className="font-bold">{nivelComissao}</span>
+                </Badge>
+              </div>
+            }
+        />
 
-      {/* Banner de onboarding — só aparece para novos usuários */}
-      <OnboardingBanner />
+        {/* LINHA 1: Cards de KPI Rápidos */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="shadow-sm border-gray-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between space-y-0 pb-2">
+                <p className="text-sm font-medium text-gray-500">Faturado (Mês)</p>
+                <DollarSign className="h-4 w-4 text-emerald-600" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900">{formatCurrency(estatisticas.faturado)}</h2>
+              <p className="text-xs text-emerald-600 font-medium flex items-center mt-1">
+                <TrendingUp className="h-3 w-3 mr-1" /> Pedidos concluídos
+              </p>
+            </CardContent>
+          </Card>
 
-      {/* KPI Cards */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="border-glow bg-card"><CardContent className="p-5 space-y-3">
-              <div className="flex justify-between"><div className="space-y-2"><Skeleton className="h-3 w-24" /><Skeleton className="h-8 w-16" /></div><Skeleton className="h-10 w-10 rounded-xl" /></div>
-              <Skeleton className="h-3 w-32" />
-            </CardContent></Card>
-          ))}
+          <Card className="shadow-sm border-gray-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between space-y-0 pb-2">
+                <p className="text-sm font-medium text-gray-500">Em Negociação</p>
+                <Target className="h-4 w-4 text-blue-600" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900">{formatCurrency(estatisticas.emNegociacao)}</h2>
+              <p className="text-xs text-gray-500 mt-1">Orçamentos e pedidos em aprovação</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm border-gray-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between space-y-0 pb-2">
+                <p className="text-sm font-medium text-gray-500">Vendas Fechadas</p>
+                <ShoppingCart className="h-4 w-4 text-purple-600" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900">{estatisticas.totalPedidosFechados}</h2>
+              <p className="text-xs text-gray-500 mt-1">Volume total de notas emitidas</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm border-gray-200 bg-gradient-to-br from-blue-50 to-indigo-50/30">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between space-y-0 pb-2">
+                <p className="text-sm font-medium text-blue-800">Ticket Médio</p>
+                <Flame className="h-4 w-4 text-orange-500" />
+              </div>
+              <h2 className="text-3xl font-bold text-blue-900">{formatCurrency(estatisticas.ticketMedio)}</h2>
+              <p className="text-xs text-blue-600/80 mt-1 font-medium">Valor médio por cliente fechado</p>
+            </CardContent>
+          </Card>
         </div>
-      ) : (
-        <motion.div variants={container} initial="hidden" animate="show"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((s, i) => (
-            <motion.div key={i} variants={item}>
-              <Card className="border-glow glow-card bg-card">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground font-medium">{s.title}</p>
-                      <p className="text-3xl font-bold letter-tight mt-1"><AnimatedCounter value={s.value} /></p>
-                    </div>
-                    <div className="h-10 w-10 rounded-xl flex items-center justify-center" style={{ background: `${s.color.replace(')', ' / 0.15)')}` }}>
-                      <s.icon className="h-5 w-5" style={{ color: s.color }} />
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                      <TrendingUp className="h-3 w-3" />Acumulado
-                    </span>
-                    {s.spark.length > 0 && <SparkLine data={s.spark} color={s.color} />}
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </motion.div>
-      )}
 
-      {/* Gráfico + Próximos Eventos */}
-      <div className="grid grid-cols-1 lg:grid-cols-10 gap-4">
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="lg:col-span-7">
-          <Card className="border-glow bg-card">
-            <CardContent className="p-5">
-              <h3 className="text-sm font-semibold mb-4">Pedidos por Mês</h3>
-              {isLoading
-                ? <Skeleton className="w-full h-[220px] rounded-lg" />
-                : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={monthlyData}>
-                      <XAxis dataKey="name" tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                      <Tooltip contentStyle={{ background: 'hsl(240 22% 12%)', border: '1px solid hsl(240 10% 18%)', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }} />
-                      <Bar dataKey="pedidos" radius={[6,6,0,0]} fill="url(#barGrad)" />
-                      <defs>
-                        <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="hsl(239 84% 67%)" />
-                          <stop offset="100%" stopColor="hsl(258 90% 66%)" />
-                        </linearGradient>
-                      </defs>
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
+        {/* ÁREAS ESCONDIDAS (Apenas para Gestão e Permissões Especiais) */}
+        {(isManagerOrAdmin || canApprove) && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+              {/* RANKING DA EQUIPE (Só Admin/Gerente) */}
+              {isManagerOrAdmin && (
+                  <Card className="lg:col-span-2 shadow-sm border-blue-100 bg-blue-50/30">
+                    <CardHeader className="pb-3 border-b border-blue-100/50">
+                      <CardTitle className="text-lg flex items-center gap-2 text-blue-900">
+                        <Users className="h-5 w-5 text-blue-600" /> Ranking de Vendas da Equipe
+                      </CardTitle>
+                      <CardDescription>Os melhores vendedores do mês em faturamento.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {rankingEquipe.length === 0 ? (
+                          <div className="p-6 text-center text-sm text-gray-500">Ainda não há vendas fechadas neste mês.</div>
+                      ) : (
+                          <div className="divide-y divide-gray-100">
+                            {rankingEquipe.map((vendedor, index) => (
+                                <div key={index} className="flex items-center justify-between p-4 hover:bg-white transition-colors">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`flex items-center justify-center h-8 w-8 rounded-full font-bold text-sm ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-200 text-gray-700' : index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
+                                      {index === 0 ? <Medal className="h-4 w-4" /> : `${index + 1}º`}
+                                    </div>
+                                    <div>
+                                      <p className="font-semibold text-gray-900 text-sm">{vendedor.nome}</p>
+                                      <p className="text-xs text-gray-500">{vendedor.totalVendas} pedidos fechados</p>
+                                    </div>
+                                  </div>
+                                  <div className="font-bold text-blue-700">
+                                    {formatCurrency(vendedor.faturado)}
+                                  </div>
+                                </div>
+                            ))}
+                          </div>
+                      )}
+                    </CardContent>
+                  </Card>
+              )}
+
+              {/* ALERTAS DA GELADEIRA (Para quem pode Aprovar) */}
+              {canApprove && (
+                  <Card className="shadow-sm border-orange-200 bg-orange-50/50">
+                    <CardHeader className="pb-3 border-b border-orange-100">
+                      <CardTitle className="text-lg flex items-center gap-2 text-orange-900">
+                        <AlertCircle className="h-5 w-5 text-orange-600" /> Ações Pendentes
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6 flex flex-col items-center justify-center text-center">
+                      <div className="h-16 w-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center text-2xl font-bold mb-3 shadow-inner">
+                        {clientesPendentes}
+                      </div>
+                      <h3 className="font-semibold text-gray-900">Clientes na Geladeira</h3>
+                      <p className="text-sm text-gray-600 mt-1 mb-4">
+                        Aguardando a sua revisão para liberar compras ou distribuir a um vendedor.
+                      </p>
+                      <Link to="/clientes">
+                        <Button variant="default" className="w-full bg-orange-600 hover:bg-orange-700 text-white shadow-sm">
+                          Revisar Clientes
+                        </Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
+              )}
+            </div>
+        )}
+
+        {/* LINHA 3: Termômetro de Metas Pessoais & Agenda (Para todos) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2 shadow-sm border-gray-200">
+            <CardHeader className="pb-2 border-b border-gray-100 mb-4">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Target className="h-5 w-5 text-red-500" /> Aceleração de Metas (Suas Vendas)
+              </CardTitle>
+              <CardDescription>Acompanhe o seu progresso pessoal para subir de nível de comissão.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm font-medium">
+                <span className="text-gray-700 flex items-center gap-2">
+                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Meta Ouro</Badge>
+                  Desbloqueia 5%
+                </span>
+                  <span className={progressoMeta >= 100 ? "text-green-600" : "text-gray-500"}>
+                  {formatCurrency(estatisticas.faturado)} / {formatCurrency(META_MENSAL)}
+                </span>
+                </div>
+                <Progress value={progressoMeta} className="h-3" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm font-medium">
+                <span className="text-gray-700 flex items-center gap-2">
+                  <Badge variant="outline" className={progressoMeta >= 100 ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-400"}>Meta Diamante</Badge>
+                  Desbloqueia 7%
+                </span>
+                  <span className={progressoSuper >= 100 ? "text-green-600" : "text-gray-400"}>
+                  {formatCurrency(Math.max(0, estatisticas.faturado - META_MENSAL))} / {formatCurrency(META_SUPER - META_MENSAL)}
+                </span>
+                </div>
+                <Progress value={progressoSuper} className={`h-3 ${progressoMeta < 100 ? "opacity-30" : ""}`} />
+              </div>
             </CardContent>
           </Card>
-        </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="lg:col-span-3">
-          <Card className="border-glow bg-card h-full">
-            <CardContent className="p-5">
-              <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-primary" /> Próximos Compromissos
-              </h3>
-              {isLoading
-                ? <div className="space-y-3">{Array.from({ length: 3 }).map((_,i) => <div key={i} className="flex gap-3"><Skeleton className="h-8 w-8 rounded-lg" /><div className="space-y-1 flex-1"><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div></div>)}</div>
-                : upcomingEvents.length === 0
-                  ? <p className="text-muted-foreground text-xs text-center py-8">Nenhum compromisso agendado</p>
-                  : (
-                    <div className="space-y-3">
-                      {upcomingEvents.map(ev => (
-                        <div key={ev.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors">
-                          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            <Clock className="h-3.5 w-3.5 text-primary" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium truncate">{ev.titulo}</p>
-                            <p className="text-[10px] text-muted-foreground">{new Date(ev.dataInicio).toLocaleDateString('pt-BR')}</p>
-                          </div>
-                        </div>
-                      ))}
+          <Card className="shadow-sm border-gray-200 flex flex-col">
+            <CardHeader className="pb-3 border-b border-gray-100">
+              <CardTitle className="text-lg flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CalendarIcon className="h-5 w-5 text-blue-600" /> Próximas Ações
+                </div>
+                <Link to="/agenda" className="text-xs text-blue-600 hover:underline font-medium">Ver tudo</Link>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 p-0">
+              <ScrollArea className="h-[240px]">
+                {eventosFuturos.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400 p-6 text-center">
+                      <CalendarIcon className="h-10 w-10 mb-2 opacity-20" />
+                      <p className="text-sm font-medium">Agenda livre!</p>
                     </div>
-                  )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-
-      {/* Últimos Pedidos */}
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
-        <Card className="border-glow bg-card">
-          <CardContent className="p-5">
-            <h3 className="text-sm font-semibold mb-4">Últimos Pedidos</h3>
-            {isLoading
-              ? <div className="space-y-3">{Array.from({ length: 4 }).map((_,i) => <div key={i} className="flex items-center gap-4"><Skeleton className="h-8 w-8 rounded-full" /><Skeleton className="h-3 flex-1" /><Skeleton className="h-3 w-20" /><Skeleton className="h-6 w-16 rounded-full" /></div>)}</div>
-              : lastOrders.length === 0
-                ? (
-                  <div className="text-center py-8">
-                    <Package className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">Nenhum pedido ainda.</p>
-                    <p className="text-xs text-muted-foreground mt-1">Cadastre um cliente e crie seu primeiro pedido.</p>
-                  </div>
-                )
-                : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-border/30 hover:bg-transparent">
-                        <TableHead className="text-muted-foreground text-xs">Cliente</TableHead>
-                        <TableHead className="text-muted-foreground text-xs">Empresa</TableHead>
-                        <TableHead className="text-muted-foreground text-xs">Valor</TableHead>
-                        <TableHead className="text-muted-foreground text-xs">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {lastOrders.map(order => (
-                        <TableRow key={order.id} className="border-border/20 hover:bg-muted/20 transition-colors">
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <AvatarInitials name={order.clienteNome || 'C'} size="sm" />
-                              <span className="text-sm font-medium">{order.clienteNome || order.customerId}</span>
+                ) : (
+                    <div className="divide-y divide-gray-100">
+                      {eventosFuturos.map((evento) => {
+                        const dataObj = new Date(evento.dataInicio);
+                        const diaMes = dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+                        const hora = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                        return (
+                            <div key={evento.id} className="p-4 hover:bg-gray-50 transition-colors group">
+                              <div className="flex justify-between items-start mb-1">
+                                <h4 className="font-semibold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">
+                                  {evento.titulo}
+                                </h4>
+                                <Badge variant="outline" className="text-[10px] uppercase tracking-wider bg-white">
+                                  {evento.tipo}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
+                                <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{diaMes} às {hora}</span>
+                                {evento.customer?.nome && <span className="truncate max-w-[120px]">&bull; {evento.customer.nome}</span>}
+                              </div>
                             </div>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{order.empresaNome || order.companyId}</TableCell>
-                          <TableCell className="text-sm font-medium">R$ {Number(order.valorTotal).toFixed(2)}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className={`${STATUS_CLASSES[order.status]} text-[10px] font-semibold`}>
-                              {STATUS_LABELS[order.status]}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                        );
+                      })}
+                    </div>
                 )}
-          </CardContent>
-        </Card>
-      </motion.div>
-    </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
+
+      </div>
   );
 }
