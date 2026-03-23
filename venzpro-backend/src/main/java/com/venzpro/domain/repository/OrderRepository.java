@@ -10,4 +10,8 @@ public interface OrderRepository extends TenantAwareRepository<Order> {
     List<Order> findAllByOrganizationId(UUID organizationId);
     List<Order> findAllByOrganizationIdAndStatus(UUID organizationId, OrderStatus status);
     Optional<Order> findByIdAndOrganizationId(UUID id, UUID organizationId);
+
+    // Filtros de Carteira para o Vendedor
+    List<Order> findAllByOrganizationIdAndUserId(UUID organizationId, UUID userId);
+    List<Order> findAllByOrganizationIdAndStatusAndUserId(UUID organizationId, OrderStatus status, UUID userId);
 }

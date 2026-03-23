@@ -236,7 +236,7 @@ VALUES (
            'a0000000-0000-0000-0000-000000000001',
            'Administrador',
            'admin@venzpro.com',
-           'admin123'
+           'admin123',
            'ADMIN',
            FALSE,
            NOW()

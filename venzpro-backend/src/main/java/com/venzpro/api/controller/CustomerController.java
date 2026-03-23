@@ -45,7 +45,13 @@ public class CustomerController {
     public CustomerResponse findById(
             @PathVariable UUID id,
             @AuthenticationPrincipal VenzproPrincipal principal) {
-        return customerService.findById(id, principal.organizationId());
+        return customerService.findById(id, principal.organizationId(), principal.userId(), UserRole.valueOf(principal.role()));
+    }
+
+    @GetMapping("/geladeira")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GERENTE')")
+    public List<CustomerResponse> findGeladeira(@AuthenticationPrincipal VenzproPrincipal principal) {
+        return customerService.findGeladeira(principal.organizationId());
     }
 
     @PutMapping("/{id}")
@@ -53,9 +59,8 @@ public class CustomerController {
             @PathVariable UUID id,
             @Valid @RequestBody CustomerRequest req,
             @AuthenticationPrincipal VenzproPrincipal principal) {
-        return customerService.update(id, req, principal.organizationId());
+        return customerService.update(id, req, principal.organizationId(), principal.userId(), UserRole.valueOf(principal.role()));
     }
-
 
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('ADMIN', 'GERENTE')")
@@ -72,7 +77,6 @@ public class CustomerController {
                 req
         );
     }
-
 
     @PatchMapping("/{id}/owner")
     @PreAuthorize("hasAnyRole('ADMIN', 'GERENTE')")
@@ -95,6 +99,6 @@ public class CustomerController {
     public void delete(
             @PathVariable UUID id,
             @AuthenticationPrincipal VenzproPrincipal principal) {
-        customerService.delete(id, principal.organizationId());
+        customerService.delete(id, principal.organizationId(), principal.userId(), UserRole.valueOf(principal.role()));
     }
 }

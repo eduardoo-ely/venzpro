@@ -16,8 +16,6 @@ public interface UserRepository extends TenantAwareRepository<User> {
 
     Optional<User> findByIdAndOrganizationId(UUID id, UUID organizationId);
 
-    // Para NotificationService §8: busca ADMIN e GERENTE de uma org
-    List<User> findAllByOrganizationIdAndRoleIn(
-            UUID organizationId, List<UserRole> roles);
+    List<User> findAllByOrganizationIdAndRoleIn(UUID organizationId, List<UserRole> roles);
 
 }

@@ -4,6 +4,7 @@ import com.venzpro.application.dto.request.OrderRequest;
 import com.venzpro.application.dto.request.OrderStatusRequest;
 import com.venzpro.application.dto.response.OrderResponse;
 import com.venzpro.application.service.OrderService;
+import com.venzpro.domain.enums.UserRole;
 import com.venzpro.infrastructure.security.VenzproPrincipal;
 import com.venzpro.domain.enums.OrderStatus;
 import jakarta.validation.Valid;
@@ -34,14 +35,14 @@ public class OrderController {
     public List<OrderResponse> findAll(
             @RequestParam(required = false) OrderStatus status,
             @AuthenticationPrincipal VenzproPrincipal principal) {
-        return orderService.findAll(principal.organizationId(), status);
+        return orderService.findAll(principal.organizationId(), principal.userId(), UserRole.valueOf(principal.role()), status);
     }
 
     @GetMapping("/{id}")
     public OrderResponse findById(
             @PathVariable UUID id,
             @AuthenticationPrincipal VenzproPrincipal principal) {
-        return orderService.findById(id, principal.organizationId());
+        return orderService.findById(id, principal.organizationId(), principal.userId(), UserRole.valueOf(principal.role()));
     }
 
     @PutMapping("/{id}")
@@ -49,7 +50,7 @@ public class OrderController {
             @PathVariable UUID id,
             @Valid @RequestBody OrderRequest req,
             @AuthenticationPrincipal VenzproPrincipal principal) {
-        return orderService.update(id, req, principal.userId(), principal.organizationId());
+        return orderService.update(id, req, principal.userId(), principal.organizationId(), UserRole.valueOf(principal.role()));
     }
 
     @PatchMapping("/{id}/status")
@@ -61,6 +62,7 @@ public class OrderController {
                 id,
                 principal.userId(),
                 principal.organizationId(),
+                UserRole.valueOf(principal.role()),
                 req
         );
     }
@@ -70,6 +72,6 @@ public class OrderController {
     public void delete(
             @PathVariable UUID id,
             @AuthenticationPrincipal VenzproPrincipal principal) {
-        orderService.delete(id, principal.organizationId());
+        orderService.delete(id, principal.organizationId(), principal.userId(), UserRole.valueOf(principal.role()));
     }
 }
