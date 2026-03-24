@@ -5,29 +5,20 @@ import com.venzpro.domain.enums.OrganizationType;
 import com.venzpro.domain.enums.UserRole;
 
 /**
- * DTO de resposta dos endpoints de autenticação.
+ * DTO de resposta dos endpoints de autenticação (/login e /register).
  *
- * Retorna tudo que o frontend React precisa para:
- *  1. Armazenar o JWT no localStorage e enviar em requests
- *  2. Popular o AuthContext (user + organization)
- *  3. Redirecionar para a tela correta baseado no role
- *  4. Aplicar permissões granulares (podeAprovar, podeExportar, podeVerDashboard)
+ * Retorna tudo que o frontend precisa para popular o AuthContext:
+ * token JWT, dados do usuário (com permissões e onboarding) e da organização.
  */
 public record AuthResponse(
-
-    /** JWT — o frontend deve enviar em: Authorization: Bearer <token> */
-    String token,
-
-    /** Dados do usuário autenticado */
-    UserData user,
-
-    /** Dados da organização do usuário */
+    String         token,
+    UserData       user,
     OrganizationData organization
-
 ) {
 
     /**
-     * Dados completos do usuário, incluindo permissões granulares.
+     * Dados completos do usuário, incluindo permissões granulares
+     * e flag de onboarding obrigatório.
      */
     public record UserData(
         String   id,
@@ -37,26 +28,26 @@ public record AuthResponse(
         String   organizationId,
         boolean  podeAprovar,
         boolean  podeExportar,
-        boolean  podeVerDashboard
+        boolean  podeVerDashboard,
+        /** Flag de onboarding obrigatório — Regra 5. */
+        boolean  onboardingCompleted
     ) {
-        /** Factory a partir da entidade User */
+        /** Cria o DTO a partir da entidade User. */
         public static UserData from(User user) {
             return new UserData(
-                    user.getId().toString(),
-                    user.getNome(),
-                    user.getEmail(),
-                    user.getRole(),
-                    user.getOrganization().getId().toString(),
-                    user.isPodeAprovar(),
-                    user.isPodeExportar(),
-                    user.isPodeVerDashboard()
+                user.getId().toString(),
+                user.getNome(),
+                user.getEmail(),
+                user.getRole(),
+                user.getOrganizationId().toString(),
+                user.isPodeAprovar(),
+                user.isPodeExportar(),
+                user.isPodeVerDashboard(),
+                user.isOnboardingCompleted()
             );
         }
     }
 
-    /**
-     * Dados da organização.
-     */
     public record OrganizationData(
         String           id,
         String           nome,

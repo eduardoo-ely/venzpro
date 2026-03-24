@@ -7,11 +7,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface OrderRepository extends TenantAwareRepository<Order> {
-    List<Order> findAllByOrganizationId(UUID organizationId);
-    List<Order> findAllByOrganizationIdAndStatus(UUID organizationId, OrderStatus status);
-    Optional<Order> findByIdAndOrganizationId(UUID id, UUID organizationId);
+    // Adicione estes métodos para suportar o filtro de registros ativos
+    List<Order> findAllByOrganizationIdAndDeletedAtIsNull(UUID organizationId);
+    List<Order> findAllByOrganizationIdAndStatusAndDeletedAtIsNull(UUID organizationId, OrderStatus status);
+    Optional<Order> findByIdAndOrganizationIdAndDeletedAtIsNull(UUID id, UUID organizationId);
 
-    // Filtros de Carteira para o Vendedor
-    List<Order> findAllByOrganizationIdAndUserId(UUID organizationId, UUID userId);
-    List<Order> findAllByOrganizationIdAndStatusAndUserId(UUID organizationId, OrderStatus status, UUID userId);
+    // Filtros para Vendedor
+    List<Order> findAllByOrganizationIdAndUserIdAndDeletedAtIsNull(UUID organizationId, UUID userId);
+    List<Order> findAllByOrganizationIdAndStatusAndUserIdAndDeletedAtIsNull(UUID organizationId, OrderStatus status, UUID userId);
 }

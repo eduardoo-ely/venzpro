@@ -34,6 +34,7 @@ public class AuthService {
     public AuthResponse login(LoginRequest request) {
         String email = request.email().toLowerCase().trim();
 
+        // A entidade User agora valida isEnabled() baseado no deletedAt
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BadCredentialsException("Credenciais inválidas"));
 
@@ -43,21 +44,23 @@ public class AuthService {
             throw new BadCredentialsException("Credenciais inválidas");
         }
 
-        Organization org = organizationRepository.findById(user.getOrganization().getId())
-                .orElseThrow(() -> new BadCredentialsException("Organização não encontrada"));
-
+        // Aceder diretamente ao ID da organização via BaseTenantEntity
         String token = jwtService.generateToken(
                 user.getId(),
-                user.getOrganization().getId(),
+                user.getOrganizationId(),
                 user.getEmail(),
                 user.getRole().name()
         );
 
         log.info("Login bem-sucedido para usuário: {}", user.getId());
         auditService.log(
-                user.getOrganization().getId(), user.getId(),
+                user.getOrganizationId(), user.getId(),
                 AuditService.LOGIN, "User", user.getId(), "Login: " + user.getEmail()
         );
+
+        // Busca a entidade completa para o DTO de resposta
+        Organization org = organizationRepository.findById(user.getOrganizationId())
+                .orElseThrow(() -> new BusinessException("Erro de consistência: Organização não encontrada"));
 
         return buildAuthResponse(token, user, org);
     }
@@ -72,6 +75,7 @@ public class AuthService {
             throw new BusinessException("Este email já está em uso.");
         }
 
+        // 1. Cria a Organização
         Organization org = Organization.builder()
                 .nome(request.nomeOrganizacao() != null && !request.nomeOrganizacao().isBlank()
                         ? request.nomeOrganizacao()
@@ -80,21 +84,27 @@ public class AuthService {
                 .build();
         org = organizationRepository.save(org);
 
+        // 2. Constrói o Utilizador
         User user = User.builder()
                 .nome(request.nome())
                 .email(email)
                 .senha(passwordEncoder.encode(request.senha()))
                 .role(UserRole.ADMIN)
-                .organization(org)
+                .onboardingCompleted(false) // Regra 5: Novo utilizador inicia onboarding
                 .podeAprovar(true)
                 .podeExportar(true)
                 .podeVerDashboard(true)
                 .build();
+
+        // REGRA CRÍTICA: Definir explicitamente o organizationId por causa do insertable=false no User.java
+        user.setOrganizationId(org.getId());
+
         user = userRepository.save(user);
 
+        // 3. Gera Token
         String token = jwtService.generateToken(
                 user.getId(),
-                user.getOrganization().getId(),
+                user.getOrganizationId(),
                 user.getEmail(),
                 user.getRole().name()
         );

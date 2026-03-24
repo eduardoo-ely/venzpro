@@ -11,23 +11,32 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Superclasse mapeada para todas as entidades multi-tenant do VenzPro.
+ * Superclasse mapeada para todas as entidades principais do VenzPro.
  *
- * Centraliza os campos comuns a TODAS as tabelas:
- *   - id          : PK UUID gerado automaticamente
- *   - organizationId : FK do tenant — NUNCA nulo, nunca mutável após criação
- *   - createdAt   : preenchido automaticamente pela auditoria JPA
- *   - updatedAt   : atualizado automaticamente em cada UPDATE
+ * Centraliza os campos de auditoria e isolamento multi-tenant:
+ * <ul>
+ *   <li>{@code id}             — PK UUID, gerado automaticamente</li>
+ *   <li>{@code organizationId} — FK do tenant; nunca nulo, nunca mutável</li>
+ *   <li>{@code createdAt}      — preenchido na criação pelo JPA Auditing</li>
+ *   <li>{@code updatedAt}      — atualizado em cada UPDATE pelo JPA Auditing</li>
+ *   <li>{@code deletedAt}      — soft-delete; {@code null} = registro ativo</li>
+ * </ul>
  *
- * Pré-requisito: a classe de configuração deve ter @EnableJpaAuditing.
- * Ver: JpaConfig.java (criado abaixo).
+ * <h3>Soft-delete</h3>
+ * Nunca faça {@code DELETE} em entidades que estendem esta classe.
+ * Use {@link #softDelete()} para marcar como excluído e
+ * {@link #isDeleted()} para verificar o estado.
  *
- * Como estender:
- * <pre>
- * {@literal @}Entity
- * {@literal @}Table(name = "products")
+ * <h3>Pré-requisito</h3>
+ * A classe de configuração JPA deve ter {@code @EnableJpaAuditing}.
+ * Ver: {@code JpaConfig.java}.
+ *
+ * <h3>Como estender</h3>
+ * <pre>{@code
+ * @Entity
+ * @Table(name = "products")
  * public class Product extends BaseTenantEntity { ... }
- * </pre>
+ * }</pre>
  */
 @Getter
 @Setter
@@ -39,6 +48,11 @@ public abstract class BaseTenantEntity {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
+    /**
+     * Identificador do tenant (organização).
+     * Sempre extraído do JWT — nunca aceito do corpo da requisição.
+     * {@code updatable = false} garante que não pode ser trocado após a criação.
+     */
     @Column(name = "organization_id", nullable = false, updatable = false)
     private UUID organizationId;
 
@@ -50,12 +64,20 @@ public abstract class BaseTenantEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /**
+     * Soft-delete: quando preenchido, o registro é considerado excluído.
+     * Todos os repositórios devem filtrar por {@code deleted_at IS NULL}.
+     */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    // ── Ciclo de vida JPA ────────────────────────────────────────────────────
+
     @PrePersist
     protected void onPrePersist() {
         if (this.id == null) {
             this.id = UUID.randomUUID();
         }
-
         if (this.createdAt == null) {
             this.createdAt = Instant.now();
         }
@@ -67,5 +89,31 @@ public abstract class BaseTenantEntity {
     @PreUpdate
     protected void onPreUpdate() {
         this.updatedAt = Instant.now();
+    }
+
+    // ── Helpers de soft-delete ───────────────────────────────────────────────
+
+    /**
+     * Marca o registro como excluído.
+     * Após chamar este método, persista a entidade normalmente via repositório.
+     */
+    public void softDelete() {
+        this.deletedAt = Instant.now();
+        this.updatedAt = this.deletedAt;
+    }
+
+    /**
+     * Restaura um registro previamente excluído.
+     */
+    public void restore() {
+        this.deletedAt = null;
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * @return {@code true} se o registro foi marcado como excluído.
+     */
+    public boolean isDeleted() {
+        return this.deletedAt != null;
     }
 }

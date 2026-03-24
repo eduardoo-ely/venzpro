@@ -25,6 +25,7 @@ export interface AuthResponse {
     podeAprovar?: boolean;
     podeExportar?: boolean;
     podeVerDashboard?: boolean;
+    onboardingCompleted: boolean;
   };
   organization: { id: string; nome: string; tipo: string };
 }

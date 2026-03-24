@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public interface UserRepository extends TenantAwareRepository<User> {
 
-    List<User> findAllByOrganizationId(UUID organizationId);
+    List<User> findAllByOrganizationIdAndDeletedAtIsNull(UUID organizationId);
 
     Optional<User> findByEmail(String email);
 
@@ -17,5 +17,4 @@ public interface UserRepository extends TenantAwareRepository<User> {
     Optional<User> findByIdAndOrganizationId(UUID id, UUID organizationId);
 
     List<User> findAllByOrganizationIdAndRoleIn(UUID organizationId, List<UserRole> roles);
-
 }
