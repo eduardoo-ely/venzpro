@@ -23,12 +23,20 @@ export interface User {
 }
 
 export interface Company {
-  id: string;
-  nome: string;
+  id:           string;
+  nome:         string;
+  cnpj?:        string;
+  razaoSocial?: string;
+  cep?:         string;
+  logradouro?:  string;
+  numero?:      string;
+  complemento?: string;
+  bairro?:      string;
+  cidade?:      string;
+  uf?:          string;
   organizationId: string;
-  createdAt?: string;
+  createdAt?:   string;
 }
-
 export interface Product {
   id: string;
   organizationId: string;

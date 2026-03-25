@@ -55,7 +55,6 @@ public class OrderService {
 
     @Transactional
     public OrderResponse create(OrderRequest req, UUID userId, UUID organizationId) {
-
         validarRequest(req);
 
         var customer = buscarClientePorOrg(req.customerId(), organizationId);
@@ -74,14 +73,13 @@ public class OrderService {
 
         order.setOrganizationId(organizationId);
 
-        var itens = criarItens(order, req.items(), organizationId);
-        order.setItens(itens);
+        aplicarItens(order, req.items(), organizationId);
 
         order.recalcularTotal();
 
         var saved = orderRepository.save(order);
 
-        registrarHistoricoStatus(saved, null, OrderStatus.ORCAMENTO, userId, "Criação inicial do pedido");
+        registrarHistoricoStatus(saved, null, OrderStatus.ORCAMENTO, userId, "Pedido criado via API");
 
         auditService.log(
                 organizationId,
@@ -347,7 +345,6 @@ public class OrderService {
     }
 
     private void aplicarItens(Order order, List<OrderItemRequest> items, UUID organizationId) {
-
         if (items == null || items.isEmpty()) {
             throw new BusinessException("O pedido deve conter ao menos um item.");
         }
@@ -355,6 +352,9 @@ public class OrderService {
         order.clearItens();
 
         for (OrderItemRequest req : items) {
+            if (req.quantidade() == null || req.quantidade().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                throw new BusinessException("A quantidade dos itens deve ser maior que zero.");
+            }
 
             var product = productRepository
                     .findByIdAndOrganizationId(req.productId(), organizationId)
@@ -362,12 +362,13 @@ public class OrderService {
 
             if (product.getPrecoBase() == null) {
                 throw new BusinessException(
-                        "Produto '" + product.getNome() + "' não possui preço definido."
+                        "O produto '" + product.getNome() + "' não pode ser vendido sem preço definido."
                 );
             }
 
             order.addItem(
                     OrderItem.builder()
+                            .order(order)
                             .product(product)
                             .quantidade(req.quantidade())
                             .precoUnitario(product.getPrecoBase())

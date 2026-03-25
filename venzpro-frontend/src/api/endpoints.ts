@@ -54,12 +54,25 @@ export const usersApi = {
 
 // ── Companies ─────────────────────────────────────────────────────────────────
 
+export interface CompanyPayload {
+  nome:         string;
+  cnpj?:        string;
+  razaoSocial?: string;
+  cep?:         string;
+  logradouro?:  string;
+  numero?:      string;
+  complemento?: string;
+  bairro?:      string;
+  cidade?:      string;
+  uf?:          string;
+}
+
 export const companiesApi = {
-  list:   ()                                => api.get<Company[]>('/companies').then(r => r.data),
-  get:    (id: string)                      => api.get<Company>(`/companies/${id}`).then(r => r.data),
-  create: (d: { nome: string })             => api.post<Company>('/companies', d).then(r => r.data),
-  update: (id: string, d: { nome: string }) => api.put<Company>(`/companies/${id}`, d).then(r => r.data),
-  remove: (id: string)                      => api.delete(`/companies/${id}`).then(r => r.data),
+  list:   ()                                      => api.get<Company[]>('/companies').then(r => r.data),
+  get:    (id: string)                            => api.get<Company>(`/companies/${id}`).then(r => r.data),
+  create: (d: CompanyPayload)                     => api.post<Company>('/companies', d).then(r => r.data),
+  update: (id: string, d: CompanyPayload)         => api.put<Company>(`/companies/${id}`, d).then(r => r.data),
+  remove: (id: string)                            => api.delete(`/companies/${id}`).then(r => r.data),
 };
 
 // ── Customers ─────────────────────────────────────────────────────────────────
