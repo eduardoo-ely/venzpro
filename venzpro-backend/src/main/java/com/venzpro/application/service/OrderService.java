@@ -17,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.EnumSet;
 import java.util.List;
@@ -133,6 +135,46 @@ public class OrderService {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // READ (BUSCAS)
+    // ─────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public Page<OrderResponse> findAll(UUID organizationId, UUID userId, UserRole role, OrderStatus status, Pageable pageable) {
+        Page<Order> ordersPage;
+
+        if (role == UserRole.VENDEDOR) {
+            if (status != null) {
+                // Passando o pageable no final da chamada do repositório
+                ordersPage = orderRepository.findAllByOrganizationIdAndStatusAndUserIdAndDeletedAtIsNull(organizationId, status, userId, pageable);
+            } else {
+                // Passando o pageable no final da chamada do repositório
+                ordersPage = orderRepository.findAllByOrganizationIdAndUserIdAndDeletedAtIsNull(organizationId, userId, pageable);
+            }
+        } else {
+            if (status != null) {
+                // Passando o pageable no final da chamada do repositório
+                ordersPage = orderRepository.findAllByOrganizationIdAndStatusAndDeletedAtIsNull(organizationId, status, pageable);
+            } else {
+                // Passando o pageable no final da chamada do repositório
+                ordersPage = orderRepository.findAllByOrganizationIdAndDeletedAtIsNull(organizationId, pageable);
+            }
+        }
+
+        return ordersPage.map(OrderResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse findById(UUID id, UUID organizationId, UUID userId, UserRole role) {
+        // O helper interno já filtra por organização e garante que não está deletado
+        var order = buscarPedidoPorOrg(id, organizationId);
+
+        // A trava de segurança: se for vendedor, valida se ele é o dono do pedido
+        validarOwnerPedido(order, userId, role);
+
+        return OrderResponse.from(order);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // STATUS
     // ─────────────────────────────────────────────────────────────
 
@@ -153,6 +195,11 @@ public class OrderService {
         validarTransicaoStatus(statusAtual, novoStatus, req.motivo());
 
         var changedBy = buscarUsuarioPorOrg(userId, organizationId);
+
+        // Trava: Vendedor não pode aprovar os próprios pedidos
+        if (novoStatus == OrderStatus.APROVADO && role == UserRole.VENDEDOR) {
+            throw new BusinessException("Apenas Gerentes ou Admins podem APROVAR um pedido.");
+        }
 
         if (novoStatus == OrderStatus.CANCELADO) {
             order.registrarCancelamento(changedBy, req.motivo());
@@ -349,6 +396,10 @@ public class OrderService {
             throw new BusinessException("O pedido deve conter ao menos um item.");
         }
 
+        // Salva uma cópia rápida dos itens atuais para buscar o preço histórico
+        var itensAntigos = order.getItens().stream()
+                .collect(Collectors.toMap(item -> item.getProduct().getId(), OrderItem::getPrecoUnitario));
+
         order.clearItens();
 
         for (OrderItemRequest req : items) {
@@ -360,7 +411,13 @@ public class OrderService {
                     .findByIdAndOrganizationId(req.productId(), organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Produto", req.productId()));
 
-            if (product.getPrecoBase() == null) {
+            // MÁGICA AQUI: Se o item já existia neste pedido, mantém o preço da época.
+            // Só busca o preço base atual se for um produto adicionado hoje.
+            var precoVenda = itensAntigos.containsKey(product.getId())
+                    ? itensAntigos.get(product.getId())
+                    : product.getPrecoBase();
+
+            if (precoVenda == null) {
                 throw new BusinessException(
                         "O produto '" + product.getNome() + "' não pode ser vendido sem preço definido."
                 );
@@ -371,7 +428,7 @@ public class OrderService {
                             .order(order)
                             .product(product)
                             .quantidade(req.quantidade())
-                            .precoUnitario(product.getPrecoBase())
+                            .precoUnitario(precoVenda)
                             .build()
             );
         }

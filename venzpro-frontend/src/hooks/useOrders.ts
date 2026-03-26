@@ -46,7 +46,9 @@ export function useOrders(statusFilter?: OrderStatus) {
   });
 
   return {
-    orders:       query.data ?? [],
+    orders: Array.isArray(query.data)
+        ? query.data
+        : (query.data?.content ?? []),
     isLoading:    query.isLoading,
     isError:      query.isError,
     create,

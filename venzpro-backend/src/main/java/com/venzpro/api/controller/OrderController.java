@@ -12,6 +12,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.ResponseEntity;
 
 import java.util.List;
 import java.util.UUID;
@@ -32,10 +37,19 @@ public class OrderController {
     }
 
     @GetMapping
-    public List<OrderResponse> findAll(
+    public ResponseEntity<Page<OrderResponse>> findAll(
             @RequestParam(required = false) OrderStatus status,
-            @AuthenticationPrincipal VenzproPrincipal principal) {
-        return orderService.findAll(principal.organizationId(), principal.userId(), UserRole.valueOf(principal.role()), status);
+            @AuthenticationPrincipal VenzproPrincipal principal,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+
+        Page<OrderResponse> page = orderService.findAll(
+                principal.organizationId(),
+                principal.userId(),
+                UserRole.valueOf(principal.role()),
+                status,
+                pageable
+        );
+        return ResponseEntity.ok(page);
     }
 
     @GetMapping("/{id}")

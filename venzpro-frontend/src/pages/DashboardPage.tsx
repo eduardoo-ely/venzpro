@@ -1,32 +1,28 @@
-import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useOrders } from '@/hooks/useOrders';
-import { useEvents } from '@/hooks/useEvents';
-import { useCustomers } from '@/hooks/useCustomers';
-import { PageHeader } from '@/components/PageHeader';
 import { SellerDashboardView } from './dashboards/SellerDashboardView';
 import { ManagerDashboardView } from './dashboards/ManagerDashboardView';
+// Importa também o Admin se já o tiveres: import { AdminDashboardView } from './dashboards/AdminDashboardView';
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-  const { orders = [] } = useOrders();
-  const { events = [] } = useEvents();
-  const { customers = [] } = useCustomers();
+    const { user } = useAuth();
 
-  const isManagerOrAdmin = user?.role === 'ADMIN' || user?.role === 'GERENTE';
+    // Fallback de segurança: se não houver utilizador, não renderiza nada (o AppLayout chuta para o login)
+    if (!user) return null;
 
-  return (
-      <div className="space-y-6">
-        <PageHeader
-            title={`Olá, ${user?.nome?.split(' ')[0] ?? ''} 👋`}
-            subtitle={isManagerOrAdmin ? "Gestão estratégica da equipe." : "Seu progresso pessoal este mês."}
-        />
-
-        {isManagerOrAdmin ? (
-            <ManagerDashboardView orders={orders} customers={customers} />
-        ) : (
-            <SellerDashboardView orders={orders} events={events} />
-        )}
-      </div>
-  );
+    // Renderiza a view consoante a ROLE do utilizador logado
+    switch (user.role) {
+        case 'VENDEDOR':
+            return <SellerDashboardView />;
+        case 'GERENTE':
+            return <ManagerDashboardView />;
+        case 'ADMIN':
+            // Se tiveres um painel de Admin, colocas aqui. Senão, pode ver o de gerente por enquanto.
+            return <ManagerDashboardView />;
+        default:
+            return (
+                <div className="p-8 text-center text-muted-foreground">
+                    Perfil de utilizador não reconhecido. Contacte o suporte.
+                </div>
+            );
+    }
 }

@@ -462,7 +462,9 @@ export default function PedidosPage() {
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
 
   const filtered = useMemo(() => {
-    if (!orders) return [];
+    // 1. Adicionada a validação de Array.isArray
+    if (!orders || !Array.isArray(orders)) return [];
+
     const lowerTerm = searchTerm.toLowerCase();
     return orders.filter(o => {
       const matchSearch =
@@ -477,7 +479,9 @@ export default function PedidosPage() {
 
   // KPIs rápidos no topo
   const kpis = useMemo(() => {
-    if (!orders) return { total: 0, abertos: 0, valorTotal: 0 };
+    // 2. Adicionada a validação de Array.isArray
+    if (!orders || !Array.isArray(orders)) return { total: 0, abertos: 0, valorTotal: 0 };
+
     return {
       total:      orders.length,
       abertos:    orders.filter(o => ['ORCAMENTO', 'ENVIADO', 'APROVADO'].includes(o.status)).length,
