@@ -38,38 +38,27 @@ public class TenantIsolationAspect {
     public void verifyTenantOnWrite(JoinPoint joinPoint) {
         UUID currentOrgId = TenantContext.getOrNull();
 
-        // Sem contexto de tenant (ex: threads assíncronas de import, seeds, testes)
+        Object[] args = joinPoint.getArgs();
+        if (args.length == 0 || args[0] == null) return;
+        Object entity = args[0];
+        String entityName = entity.getClass().getSimpleName();
+
+        if (SKIP_ENTITIES.contains(entityName)) return;
+
+        UUID entityOrgId = extractOrganizationId(entity);
+        if (entityOrgId == null) return;
+
         if (currentOrgId == null) {
+           log.error("[SECURITY] Save sem TenantContext para entidade com orgId={} — {}",
+                    entityOrgId, entityName);
             return;
         }
 
-        Object[] args = joinPoint.getArgs();
-        for (Object arg : args) {
-            if (arg == null) continue;
-
-            String entityName = arg.getClass().getSimpleName();
-
-            // Entidades isentas de validação
-            if (SKIP_ENTITIES.contains(entityName)) {
-                return;
-            }
-
-            UUID entityOrgId = extractOrganizationId(arg);
-
-            // Entidade sem campo de organização — ignora
-            if (entityOrgId == null) {
-                return;
-            }
-
-            if (!entityOrgId.equals(currentOrgId)) {
-                log.error(
-                    "VIOLAÇÃO DE SEGURANÇA: org da entidade ({}) incompatível com sessão ({}). Entidade: {}",
-                    entityOrgId, currentOrgId, entityName
-                );
-                throw new TenantViolationException(
-                    "Acesso negado: os dados pertencem a outra organização."
-                );
-            }
+        if (!entityOrgId.equals(currentOrgId)) {
+            log.error("[SECURITY] VIOLAÇÃO CROSS-TENANT: contexto={} entidade={} — {}",
+                    currentOrgId, entityOrgId, entityName);
+            throw new TenantViolationException(
+                    "Acesso negado: os dados pertencem a outra organização.");
         }
     }
 

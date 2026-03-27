@@ -9,6 +9,8 @@ import com.venzpro.domain.entity.CustomerOwnerHistory;
 import com.venzpro.domain.entity.User;
 import com.venzpro.domain.enums.CustomerStatus;
 import com.venzpro.domain.enums.UserRole;
+import com.venzpro.domain.enums.OrderStatus;
+import com.venzpro.domain.repository.OrderRepository;
 import com.venzpro.domain.repository.CustomerOwnerHistoryRepository;
 import com.venzpro.domain.repository.CustomerRepository;
 import com.venzpro.domain.repository.OrganizationRepository;
@@ -28,12 +30,13 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CustomerService {
 
-    private final CustomerRepository             customerRepository;
-    private final UserRepository                 userRepository;
-    private final OrganizationRepository         organizationRepository;
-    private final CustomerOwnerHistoryRepository ownerHistoryRepository;
-    private final AuditService                   auditService;
-    private final NotificationService            notificationService;
+    private final OrderRepository                   orderRepository;
+    private final CustomerRepository                customerRepository;
+    private final UserRepository                    userRepository;
+    private final OrganizationRepository            organizationRepository;
+    private final CustomerOwnerHistoryRepository    ownerHistoryRepository;
+    private final AuditService                      auditService;
+    private final NotificationService               notificationService;
 
     private static final String CREATE_CUSTOMER   = "CREATE_CUSTOMER";
     private static final String APPROVE_CUSTOMER  = "APPROVE_CUSTOMER";
@@ -206,8 +209,23 @@ public class CustomerService {
     public void delete(UUID id, UUID organizationId, UUID userId, UserRole role) {
         var customer = customerRepository.findByIdAndOrganizationId(id, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente", id));
+
         validateCustomerOwnership(customer, userId, role);
-        customerRepository.delete(customer);
+
+        // Bloqueia delete de cliente com pedidos não-terminais
+        long pedidosAtivos = orderRepository.countByCustomerIdAndStatusIn(
+                id, List.of(OrderStatus.ORCAMENTO, OrderStatus.ENVIADO, OrderStatus.APROVADO)
+        );
+        if (pedidosAtivos > 0) {
+            throw new BusinessException(
+                    "Não é possível remover cliente com " + pedidosAtivos + " pedido(s) em andamento."
+            );
+        }
+
+        customer.softDelete();
+        customerRepository.save(customer);
+        auditService.log(organizationId, userId, AuditService.DELETE_CUSTOMER,
+                "Customer", id, "Cliente removido: " + customer.getNome());
     }
 
     private void validateCustomerOwnership(Customer customer, UUID userId, UserRole role) {

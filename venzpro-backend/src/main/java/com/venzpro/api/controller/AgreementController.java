@@ -9,6 +9,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.venzpro.infrastructure.security.VenzproPrincipal;
 
 import java.util.List;
 import java.util.UUID;
@@ -39,7 +41,8 @@ public class AgreementController {
 
     @PatchMapping("/{id}/toggle")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void toggleStatus(@PathVariable UUID id) {
-        agreementService.toggleStatus(id);
+    public void toggleStatus(@PathVariable UUID id,
+                             @AuthenticationPrincipal VenzproPrincipal principal) {
+        agreementService.toggleStatus(id, principal.organizationId());
     }
 }

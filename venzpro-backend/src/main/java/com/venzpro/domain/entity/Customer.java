@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -52,4 +53,16 @@ public class Customer {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    public void softDelete() {
+        this.deletedAt = Instant.now();
+    }
+
+    public boolean isDeleted() {
+        return this.deletedAt != null;
+    }
+
 }

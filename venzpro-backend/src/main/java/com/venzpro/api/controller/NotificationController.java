@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
@@ -37,15 +38,13 @@ public class NotificationController {
     }
 
     @PatchMapping("/{id}/read")
-    public void markAsRead(
-            @PathVariable UUID id,
-            @AuthenticationPrincipal VenzproPrincipal principal) {
-
-        notificationRepository.findById(id).ifPresent(n -> {
-            if (n.getUser().getId().equals(principal.userId())) {
-                n.setLida(true);
-                notificationRepository.save(n);
-            }
-        });
+    @Transactional
+    public void markAsRead(@PathVariable UUID id,
+                           @AuthenticationPrincipal VenzproPrincipal principal) {
+        notificationRepository.findByIdAndUserId(id, principal.userId())
+                .ifPresent(n -> {
+                    n.setLida(true);
+                    notificationRepository.save(n);
+                });
     }
 }

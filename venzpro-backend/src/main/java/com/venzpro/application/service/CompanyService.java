@@ -5,6 +5,8 @@ import com.venzpro.application.dto.response.CompanyResponse;
 import com.venzpro.domain.entity.Company;
 import com.venzpro.domain.repository.CompanyRepository;
 import com.venzpro.domain.repository.OrganizationRepository;
+import com.venzpro.domain.repository.OrderRepository;
+import com.venzpro.domain.repository.CatalogFileRepository;
 import com.venzpro.infrastructure.exception.BusinessException;
 import com.venzpro.infrastructure.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -18,8 +20,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CompanyService {
 
-    private final CompanyRepository      companyRepository;
-    private final OrganizationRepository organizationRepository;
+    private final OrderRepository           orderRepository;
+    private final CatalogFileRepository     catalogFileRepository;
+    private final CompanyRepository         companyRepository;
+    private final OrganizationRepository    organizationRepository;
 
     @Transactional
     public CompanyResponse create(CompanyRequest req, UUID organizationId) {
@@ -74,6 +78,20 @@ public class CompanyService {
     public void delete(UUID id, UUID organizationId) {
         var company = companyRepository.findByIdAndOrganizationId(id, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa", id));
+
+        // Verifica dependências antes de deletar
+        if (orderRepository.existsByCompanyIdAndDeletedAtIsNull(id)) {
+            throw new BusinessException(
+                    "Não é possível remover empresa com pedidos associados.");
+        }
+
+        // Soft-delete ou, se hard delete for intencional, informar o usuário sobre catálogos
+        long arquivos = catalogFileRepository.countByCompanyId(id);
+        if (arquivos > 0) {
+            throw new BusinessException(
+                    "Remova os " + arquivos + " catálogo(s) desta empresa antes de excluí-la.");
+        }
+
         companyRepository.delete(company);
     }
 

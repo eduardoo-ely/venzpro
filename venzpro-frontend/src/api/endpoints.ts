@@ -102,8 +102,10 @@ export const customersApi = {
 // ── Orders ────────────────────────────────────────────────────────────────────
 
 export const ordersApi = {
-  list:   (status?: OrderStatus) =>
-      api.get<Order[]>('/orders', { params: status ? { status } : {} }).then(r => r.data),
+  list: (status?: OrderStatus, page = 0, size = 20) =>
+      api.get<PageResponse<Order>>('/orders', {
+        params: { ...(status ? { status } : {}), page, size }
+      }).then(r => r.data),
   get:    (id: string) =>
       api.get<Order>(`/orders/${id}`).then(r => r.data),
   create: (d: CreateOrderPayload) =>

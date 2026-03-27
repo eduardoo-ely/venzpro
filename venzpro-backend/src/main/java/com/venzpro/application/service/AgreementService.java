@@ -66,10 +66,10 @@ public class AgreementService {
     }
 
     @Transactional
-    public void toggleStatus(UUID id) {
-        Agreement agreement = agreementRepository.findById(id)
+    public void toggleStatus(UUID id, UUID organizationId) {
+        Agreement agreement = agreementRepository
+                .findByIdAndRepresentanteId(id, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Acordo", id));
-
         agreement.setAtivo(!agreement.isAtivo());
         agreementRepository.save(agreement);
     }
