@@ -61,9 +61,11 @@ public class OrderService {
 
         var customer = buscarClientePorOrg(req.customerId(), organizationId);
         var user     = buscarUsuarioPorOrg(userId, organizationId);
-        var company  = buscarEmpresaPorOrg(req.companyId(), organizationId);
 
-        validarCriacaoPedido(customer, user, req.companyId(), organizationId);
+        // ── NOVO: Busca a empresa globalmente e valida o acordo ──
+        var company  = buscarEmpresaComVinculo(req.companyId(), organizationId);
+
+        validarCriacaoPedido(customer, user);
 
         var order = Order.builder()
                 .customer(customer)
@@ -106,9 +108,11 @@ public class OrderService {
 
         var customer = buscarClientePorOrg(req.customerId(), organizationId);
         var user     = buscarUsuarioPorOrg(userId, organizationId);
-        var company  = buscarEmpresaPorOrg(req.companyId(), organizationId);
 
-        validarCriacaoPedido(customer, user, req.companyId(), organizationId);
+        // ── NOVO: Busca a empresa globalmente e valida o acordo ──
+        var company  = buscarEmpresaComVinculo(req.companyId(), organizationId);
+
+        validarCriacaoPedido(customer, user);
 
         order.setCustomer(customer);
         order.setCompany(company);
@@ -213,24 +217,15 @@ public class OrderService {
         if (req.items() == null || req.items().isEmpty()) throw new BusinessException("O pedido deve conter ao menos um item.");
     }
 
-    private void validarCriacaoPedido(Customer customer, User user,
-                                      UUID companyId, UUID organizationId) {
+    private void validarCriacaoPedido(Customer customer, User user) {
         if (customer.getStatus() != CustomerStatus.APROVADO) {
             throw new BusinessException("Cliente não está aprovado. Status atual: " + customer.getStatus());
         }
 
-        // ── FIX Passo 1-A: ADMIN pode criar pedidos para qualquer cliente aprovado ──
-        // ADMIN não precisa ser dono da carteira nem ter cliente atribuído a si.
-        // GERENTE também tem liberdade total de criação.
+        // ADMIN e GERENTE podem criar pedidos para qualquer cliente aprovado
         if (user.getRole() != UserRole.ADMIN && user.getRole() != UserRole.GERENTE) {
             validarClienteParaVendedor(customer, user);
         }
-
-        // ── FIX Passo 1-B: Vínculo implícito para empresas da própria organização ──
-        // Se a empresa foi cadastrada pela própria organização do representante,
-        // não é necessário um acordo formal de ecossistema.
-        // Um acordo formal só é exigido quando a empresa pertence a OUTRA organização.
-        validarAcordoEmpresa(companyId, organizationId);
     }
 
     private void validarClienteParaVendedor(Customer customer, User user) {
@@ -275,39 +270,35 @@ public class OrderService {
     }
 
     private void validarOwnerPedido(Order order, UUID userId, UserRole role) {
-        // ADMIN e GERENTE veem todos os pedidos da organização
         if (role == UserRole.ADMIN || role == UserRole.GERENTE) return;
         if (!order.getUser().getId().equals(userId)) {
             throw new TenantViolationException("Sem permissão para acessar este pedido.");
         }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // INTEGRAÇÃO ECOSSISTEMA (Empresas e Produtos)
+    // ─────────────────────────────────────────────────────────────
+
     /**
-     * Valida se a organização pode vender produtos desta empresa.
-     *
-     * Regra de negócio (Passo 1-B):
-     * - Se a empresa pertence à MESMA organização do representante → VÍNCULO IMPLÍCITO → permitido.
-     * - Se a empresa pertence a OUTRA organização → exige acordo formal ativo no ecossistema.
-     * - Se companyId for null → permitido (produto global, sem empresa vinculada).
+     * Resolve o Cenário A (Hub) e o Cenário B (Local).
+     * Procura a empresa globalmente e valida se a organização a pode usar.
      */
-    private void validarAcordoEmpresa(UUID companyId, UUID organizationId) {
-        if (companyId == null) return;
+    private Company buscarEmpresaComVinculo(UUID companyId, UUID organizationId) {
+        if (companyId == null) return null;
 
-        // Verifica se a empresa foi cadastrada pela própria organização (vínculo implícito)
-        boolean empresaDaOrg = companyRepository.existsByIdAndOrganizationId(companyId, organizationId);
-        if (empresaDaOrg) return; // Vínculo implícito — sem necessidade de acordo formal
+        var company = companyRepository.findById(companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Empresa", companyId));
 
-        // Empresa de outra organização → exige acordo formal
-        if (!agreementService.hasActiveAgreement(organizationId, companyId)) {
-            throw new BusinessException(
-                    "Sua organização não possui um acordo ativo para vender produtos desta empresa. " +
-                            "Solicite um convite à empresa fornecedora ou cadastre a empresa localmente.");
+        // Se a empresa não for da própria organização, exige um acordo ativo no ecossistema
+        if (!company.getOrganization().getId().equals(organizationId)) {
+            if (!agreementService.hasActiveAgreement(organizationId, companyId)) {
+                throw new BusinessException(
+                        "A sua organização não tem um acordo ativo para vender produtos desta empresa.");
+            }
         }
+        return company;
     }
-
-    // ─────────────────────────────────────────────────────────────
-    // ITENS
-    // ─────────────────────────────────────────────────────────────
 
     private void aplicarItens(Order order, List<OrderItemRequest> items, UUID organizationId) {
         if (items == null || items.isEmpty())
@@ -322,9 +313,16 @@ public class OrderService {
             if (req.quantidade() == null || req.quantidade().compareTo(java.math.BigDecimal.ZERO) <= 0)
                 throw new BusinessException("A quantidade dos itens deve ser maior que zero.");
 
-            var product = productRepository
-                    .findByIdAndOrganizationId(req.productId(), organizationId)
+            // ── NOVO: Procura o produto de forma global e valida segurança depois ──
+            var product = productRepository.findById(req.productId())
                     .orElseThrow(() -> new ResourceNotFoundException("Produto", req.productId()));
+
+            // Verifica se o produto pertence a outra organização sem acordo
+            if (!product.getOrganization().getId().equals(organizationId)) {
+                if (product.getCompany() == null || !agreementService.hasActiveAgreement(organizationId, product.getCompany().getId())) {
+                    throw new BusinessException("O produto '" + product.getNome() + "' não pertence à sua organização nem a um fornecedor parceiro.");
+                }
+            }
 
             var precoVenda = itensAntigos.containsKey(product.getId())
                     ? itensAntigos.get(product.getId())
@@ -345,7 +343,7 @@ public class OrderService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // HELPERS
+    // HELPERS (Cliente e Usuário sempre pertencem à Org do Rep)
     // ─────────────────────────────────────────────────────────────
 
     private void registrarHistoricoStatus(Order order, OrderStatus de, OrderStatus para,
@@ -372,11 +370,5 @@ public class OrderService {
         return userRepository
                 .findByIdAndOrganizationId(id, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuário", id));
-    }
-
-    private Company buscarEmpresaPorOrg(UUID id, UUID organizationId) {
-        return companyRepository
-                .findByIdAndOrganizationId(id, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Empresa", id));
     }
 }
