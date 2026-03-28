@@ -36,7 +36,7 @@ export function NovoPedidoSheet({ isOpen, onClose }: NovoPedidoSheetProps) {
   const { customers,  isLoading: isLoadingCustomers  } = useCustomers();
   const { companies,  isLoading: isLoadingCompanies  } = useCompanies();
   const { products,   isLoading: isLoadingProducts   } = useProducts();
-  const { createOrder } = useOrders();
+  const { create: createOrder } = useOrders();
 
   const [customerId, setCustomerId] = useState('');
   const [companyId,  setCompanyId]  = useState('');
@@ -44,23 +44,28 @@ export function NovoPedidoSheet({ isOpen, onClose }: NovoPedidoSheetProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [cart,       setCart]       = useState<CartItem[]>([]);
 
-  // Apenas clientes APROVADOS com owner atribuído — regra de negócio §12
-  const clientesAptos = useMemo(
-    () => (customers ?? []).filter(c => c.status === 'APROVADO' && c.ownerId),
-    [customers]
-  );
+  const clientesAptos = useMemo(() => {
+    const list = Array.isArray(customers) ? customers : (customers?.content || []);
+    return list.filter(c => c.status === 'APROVADO');
+  }, [customers]);
 
-  // products já é array (useProducts retorna products: Product[])
+  // 2. Empresas (Extração segura para o Select)
+  const safeCompanies = useMemo(() => {
+    return Array.isArray(companies) ? companies : (companies?.content || []);
+  }, [companies]);
+
+  // 3. Produtos (Filtro de busca no catálogo)
   const filteredProducts = useMemo(() => {
-    if (!searchTerm.trim()) return products;
+    const list = Array.isArray(products) ? products : (products?.content || []);
+    if (!searchTerm.trim()) return list;
+
     const lower = searchTerm.toLowerCase();
-    return products.filter(
-      p =>
-        p.nome.toLowerCase().includes(lower) ||
-        p.codigoSku?.toLowerCase().includes(lower)
+    return list.filter(
+        p =>
+            (p.nome || '').toLowerCase().includes(lower) ||
+            (p.codigoSku || '').toLowerCase().includes(lower)
     );
   }, [searchTerm, products]);
-
   // ── Carrinho ──────────────────────────────────────────────────────────────
 
   const addToCart = (product: Product) => {
@@ -196,8 +201,8 @@ export function NovoPedidoSheet({ isOpen, onClose }: NovoPedidoSheetProps) {
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      {(companies ?? []).map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                      {safeCompanies.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -342,14 +347,14 @@ export function NovoPedidoSheet({ isOpen, onClose }: NovoPedidoSheetProps) {
               <Button
                 className="w-full h-11 gradient-primary border-0 text-white font-semibold"
                 onClick={handleSubmit}
-                disabled={cart.length === 0 || createOrder.isPending}
-              >
-                {createOrder.isPending
+                disabled={cart.length === 0 || createOrder?.isPending}
+            >
+              {createOrder?.isPending
                   ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   : <ShoppingCart className="h-4 w-4 mr-2" />
-                }
-                Gerar Orçamento
-              </Button>
+              }
+              Gerar Orçamento
+            </Button>
             </div>
           </div>
         </div>

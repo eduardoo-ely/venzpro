@@ -437,7 +437,7 @@ function OrderDetailModal({ order, open, onClose }: OrderDetailModalProps) {
                 <StatusActions
                     order={order}
                     onTransition={handleTransition}
-                    isPending={updateStatus.isPending}
+                    isPending={updateStatus?.isPending}
                 />
               </div>
             </div>
@@ -462,11 +462,13 @@ export default function PedidosPage() {
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
 
   const filtered = useMemo(() => {
-    // 1. Adicionada a validação de Array.isArray
-    if (!orders || !Array.isArray(orders)) return [];
+    if (!orders) return [];
+
+    // MAGIA AQUI: Se for array, usa ele. Se for objeto paginado do Spring, pega o 'content'
+    const list = Array.isArray(orders) ? orders : (orders.content || []);
 
     const lowerTerm = searchTerm.toLowerCase();
-    return orders.filter(o => {
+    return list.filter(o => {
       const matchSearch =
           (o.clienteNome   ?? '').toLowerCase().includes(lowerTerm) ||
           (o.vendedorNome  ?? '').toLowerCase().includes(lowerTerm) ||
@@ -479,13 +481,15 @@ export default function PedidosPage() {
 
   // KPIs rápidos no topo
   const kpis = useMemo(() => {
-    // 2. Adicionada a validação de Array.isArray
-    if (!orders || !Array.isArray(orders)) return { total: 0, abertos: 0, valorTotal: 0 };
+    if (!orders) return { total: 0, abertos: 0, valorTotal: 0 };
+
+    // Mesma lógica de extração aqui
+    const list = Array.isArray(orders) ? orders : (orders.content || []);
 
     return {
-      total:      orders.length,
-      abertos:    orders.filter(o => ['ORCAMENTO', 'ENVIADO', 'APROVADO'].includes(o.status)).length,
-      valorTotal: orders
+      total:      list.length,
+      abertos:    list.filter(o => ['ORCAMENTO', 'ENVIADO', 'APROVADO'].includes(o.status)).length,
+      valorTotal: list
           .filter(o => o.status === 'CONCLUIDO')
           .reduce((acc, o) => acc + o.valorTotal, 0),
     };

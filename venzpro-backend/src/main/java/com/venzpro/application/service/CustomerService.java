@@ -8,11 +8,11 @@ import com.venzpro.domain.entity.Customer;
 import com.venzpro.domain.entity.CustomerOwnerHistory;
 import com.venzpro.domain.entity.User;
 import com.venzpro.domain.enums.CustomerStatus;
-import com.venzpro.domain.enums.UserRole;
 import com.venzpro.domain.enums.OrderStatus;
-import com.venzpro.domain.repository.OrderRepository;
+import com.venzpro.domain.enums.UserRole;
 import com.venzpro.domain.repository.CustomerOwnerHistoryRepository;
 import com.venzpro.domain.repository.CustomerRepository;
+import com.venzpro.domain.repository.OrderRepository;
 import com.venzpro.domain.repository.OrganizationRepository;
 import com.venzpro.domain.repository.UserRepository;
 import com.venzpro.infrastructure.exception.BusinessException;
@@ -30,19 +30,24 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CustomerService {
 
-    private final OrderRepository                   orderRepository;
-    private final CustomerRepository                customerRepository;
-    private final UserRepository                    userRepository;
-    private final OrganizationRepository            organizationRepository;
-    private final CustomerOwnerHistoryRepository    ownerHistoryRepository;
-    private final AuditService                      auditService;
-    private final NotificationService               notificationService;
+    private final CustomerRepository             customerRepository;
+    private final UserRepository                 userRepository;
+    private final OrganizationRepository         organizationRepository;
+    private final CustomerOwnerHistoryRepository ownerHistoryRepository;
+    private final OrderRepository                orderRepository; // ← injetado
+    private final AuditService                   auditService;
+    private final NotificationService            notificationService;
 
-    private static final String CREATE_CUSTOMER   = "CREATE_CUSTOMER";
-    private static final String APPROVE_CUSTOMER  = "APPROVE_CUSTOMER";
-    private static final String REJECT_CUSTOMER   = "REJECT_CUSTOMER";
-    private static final String ASSIGN_OWNER      = "ASSIGN_OWNER";
-    private static final String UNASSIGN_OWNER    = "UNASSIGN_OWNER";
+    private static final String CREATE_CUSTOMER  = "CREATE_CUSTOMER";
+    private static final String APPROVE_CUSTOMER = "APPROVE_CUSTOMER";
+    private static final String REJECT_CUSTOMER  = "REJECT_CUSTOMER";
+    private static final String ASSIGN_OWNER     = "ASSIGN_OWNER";
+    private static final String UNASSIGN_OWNER   = "UNASSIGN_OWNER";
+
+    /** Status não-terminais — bloqueiam a exclusão do cliente (bug C2). */
+    private static final List<OrderStatus> STATUSES_ATIVOS = List.of(
+            OrderStatus.ORCAMENTO, OrderStatus.ENVIADO, OrderStatus.APROVADO
+    );
 
     @Transactional
     public CustomerResponse create(CustomerRequest req, UUID userId) {
@@ -56,23 +61,27 @@ public class CustomerService {
         String docNormalizado = normalizarDocumento(req.cpfCnpj());
         if (docNormalizado != null && !docNormalizado.isBlank()) {
             if (customerRepository.existsByCpfCnpjAndOrganizationId(docNormalizado, orgId)) {
-                throw new BusinessException("Já existe um cliente cadastrado com este CPF/CNPJ nesta organização.");
+                throw new BusinessException(
+                        "Já existe um cliente cadastrado com este CPF/CNPJ nesta organização.");
             }
         }
 
+        // RN §6: status inicial sempre PENDENTE — ignora o que vier no DTO
         var customer = Customer.builder()
                 .nome(req.nome())
                 .telefone(req.telefone())
                 .email(req.email())
                 .cidade(req.cidade())
                 .cpfCnpj(docNormalizado)
+                .status(CustomerStatus.PENDENTE)
                 .owner(null)
                 .createdBy(user)
                 .organization(org)
                 .build();
 
         Customer saved = customerRepository.save(customer);
-        auditService.log(orgId, userId, CREATE_CUSTOMER, "Customer", saved.getId(), "Cliente: " + saved.getNome());
+        auditService.log(orgId, userId, CREATE_CUSTOMER, "Customer",
+                saved.getId(), "Cliente: " + saved.getNome());
         return CustomerResponse.from(saved);
     }
 
@@ -102,18 +111,23 @@ public class CustomerService {
     }
 
     @Transactional
-    public CustomerResponse update(UUID id, CustomerRequest req, UUID organizationId, UUID userId, UserRole role) {
+    public CustomerResponse update(UUID id, CustomerRequest req, UUID organizationId,
+                                   UUID userId, UserRole role) {
         var customer = customerRepository.findByIdAndOrganizationId(id, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente", id));
 
         validateCustomerOwnership(customer, userId, role);
 
         String docNormalizado = normalizarDocumento(req.cpfCnpj());
-        if (docNormalizado != null && !docNormalizado.isBlank() && !docNormalizado.equals(customer.getCpfCnpj())) {
-            if (customerRepository.existsByCpfCnpjAndOrganizationIdAndIdNot(docNormalizado, organizationId, id)) {
-                throw new BusinessException("Já existe outro cliente com este CPF/CNPJ nesta organização.");
+        if (docNormalizado != null && !docNormalizado.isBlank()
+                && !docNormalizado.equals(customer.getCpfCnpj())) {
+            if (customerRepository.existsByCpfCnpjAndOrganizationIdAndIdNot(
+                    docNormalizado, organizationId, id)) {
+                throw new BusinessException(
+                        "Já existe outro cliente com este CPF/CNPJ nesta organização.");
             }
         }
+
         customer.setNome(req.nome());
         customer.setTelefone(req.telefone());
         customer.setEmail(req.email());
@@ -123,40 +137,50 @@ public class CustomerService {
     }
 
     @Transactional
-    public CustomerResponse updateStatus(UUID id, UUID organizationId, UUID requesterId, UserRole requesterRole, CustomerStatusRequest req) {
+    public CustomerResponse updateStatus(UUID id, UUID organizationId, UUID requesterId,
+                                         UserRole requesterRole, CustomerStatusRequest req) {
         if (requesterRole != UserRole.ADMIN && requesterRole != UserRole.GERENTE) {
-            throw new BusinessException("Apenas ADMIN ou GERENTE podem alterar o status de clientes.");
+            throw new BusinessException(
+                    "Apenas ADMIN ou GERENTE podem alterar o status de clientes.");
         }
 
         var customer = customerRepository.findByIdAndOrganizationId(id, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente", id));
 
         if (customer.getStatus() != CustomerStatus.PENDENTE) {
-            throw new BusinessException("Somente clientes com status PENDENTE podem ser aprovados ou rejeitados. Status atual: " + customer.getStatus());
+            throw new BusinessException(
+                    "Somente clientes com status PENDENTE podem ser aprovados ou rejeitados. " +
+                            "Status atual: " + customer.getStatus());
         }
 
-        if (req.status() == CustomerStatus.REJEITADO && (req.motivo() == null || req.motivo().isBlank())) {
+        if (req.status() == CustomerStatus.REJEITADO
+                && (req.motivo() == null || req.motivo().isBlank())) {
             throw new BusinessException("O motivo é obrigatório ao rejeitar um cliente.");
         }
 
         customer.setStatus(req.status());
         var saved = customerRepository.save(customer);
 
-        String acao = req.status() == CustomerStatus.APROVADO ? APPROVE_CUSTOMER : REJECT_CUSTOMER;
-        String detalhes = "Cliente: " + customer.getNome() + (req.motivo() != null ? " | Motivo: " + req.motivo() : "");
+        String acao = req.status() == CustomerStatus.APROVADO
+                ? APPROVE_CUSTOMER : REJECT_CUSTOMER;
+        String detalhes = "Cliente: " + customer.getNome()
+                + (req.motivo() != null ? " | Motivo: " + req.motivo() : "");
         auditService.log(organizationId, requesterId, acao, "Customer", id, detalhes);
 
         if (req.status() == CustomerStatus.APROVADO && saved.getOwner() == null) {
-            notificationService.notificarClienteAprovadoSemOwner(organizationId, customer.getNome());
+            notificationService.notificarClienteAprovadoSemOwner(
+                    organizationId, customer.getNome());
         }
 
         return CustomerResponse.from(saved);
     }
 
     @Transactional
-    public CustomerResponse updateOwner(UUID id, UUID organizationId, UUID requesterId, UserRole requesterRole, CustomerOwnerRequest req) {
+    public CustomerResponse updateOwner(UUID id, UUID organizationId, UUID requesterId,
+                                        UserRole requesterRole, CustomerOwnerRequest req) {
         if (requesterRole != UserRole.ADMIN && requesterRole != UserRole.GERENTE) {
-            throw new BusinessException("Apenas ADMIN ou GERENTE podem redistribuir a carteira de clientes.");
+            throw new BusinessException(
+                    "Apenas ADMIN ou GERENTE podem redistribuir a carteira de clientes.");
         }
 
         var customer = customerRepository.findByIdAndOrganizationId(id, organizationId)
@@ -172,11 +196,16 @@ public class CustomerService {
             newOwner = userRepository.findByIdAndOrganizationId(req.ownerId(), organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Usuário", req.ownerId()));
 
-            if (newOwner.getRole() == UserRole.ADMIN) {
-                throw new BusinessException("Usuários com role ADMIN não podem ser responsáveis por clientes. Selecione um VENDEDOR ou GERENTE.");
+            // ADMIN e SUPORTE não podem ser donos de carteira (bug M6 — auditoria)
+            if (newOwner.getRole() == UserRole.ADMIN
+                    || newOwner.getRole() == UserRole.SUPORTE) {
+                throw new BusinessException(
+                        "Apenas usuários com role VENDEDOR ou GERENTE podem ser " +
+                                "responsáveis por clientes.");
             }
             if (oldOwner != null && oldOwner.getId().equals(newOwner.getId())) {
-                throw new BusinessException("O cliente já está atribuído para este responsável.");
+                throw new BusinessException(
+                        "O cliente já está atribuído para este responsável.");
             }
         }
 
@@ -212,26 +241,31 @@ public class CustomerService {
 
         validateCustomerOwnership(customer, userId, role);
 
-        // Bloqueia delete de cliente com pedidos não-terminais
-        long pedidosAtivos = orderRepository.countByCustomerIdAndStatusIn(
-                id, List.of(OrderStatus.ORCAMENTO, OrderStatus.ENVIADO, OrderStatus.APROVADO)
-        );
+        // Guard: bloqueia exclusão com pedidos não-terminais (bug C2 — auditoria)
+        long pedidosAtivos = orderRepository.countByCustomerIdAndStatusIn(id, STATUSES_ATIVOS);
         if (pedidosAtivos > 0) {
             throw new BusinessException(
-                    "Não é possível remover cliente com " + pedidosAtivos + " pedido(s) em andamento."
-            );
+                    "Não é possível remover este cliente pois ele possui " + pedidosAtivos +
+                            " pedido(s) em andamento. Cancele ou conclua-os antes de excluir.");
         }
 
+        // Soft-delete — nunca hard-delete para preservar histórico (bug C2 — auditoria)
         customer.softDelete();
         customerRepository.save(customer);
+
         auditService.log(organizationId, userId, AuditService.DELETE_CUSTOMER,
-                "Customer", id, "Cliente removido: " + customer.getNome());
+                "Customer", id, "Soft-delete: " + customer.getNome());
     }
+
+    // ── Helpers privados ──────────────────────────────────────────────────────
 
     private void validateCustomerOwnership(Customer customer, UUID userId, UserRole role) {
         if (role == UserRole.VENDEDOR) {
-            if (customer.getOwner() == null || !customer.getOwner().getId().equals(userId)) {
-                throw new TenantViolationException("Você não tem permissão para acessar clientes de outro vendedor ou não atribuídos.");
+            if (customer.getOwner() == null
+                    || !customer.getOwner().getId().equals(userId)) {
+                throw new TenantViolationException(
+                        "Você não tem permissão para acessar clientes de outro vendedor " +
+                                "ou sem responsável atribuído.");
             }
         }
     }

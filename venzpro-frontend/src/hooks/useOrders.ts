@@ -46,12 +46,10 @@ export function useOrders(statusFilter?: OrderStatus) {
   });
 
   return {
-    orders: Array.isArray(query.data)
-        ? query.data
-        : (query.data?.content ?? []),
-    isLoading:    query.isLoading,
-    isError:      query.isError,
-    create,
+    orders: Array.isArray(query.data) ? query.data : (query.data?.content ?? []),
+    isLoading: query.isLoading,
+    isError: query.isError,
+    createOrder: create,
     update,
     updateStatus,
     remove,

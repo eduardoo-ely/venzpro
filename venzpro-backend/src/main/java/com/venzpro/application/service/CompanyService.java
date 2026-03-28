@@ -3,10 +3,10 @@ package com.venzpro.application.service;
 import com.venzpro.application.dto.request.CompanyRequest;
 import com.venzpro.application.dto.response.CompanyResponse;
 import com.venzpro.domain.entity.Company;
-import com.venzpro.domain.repository.CompanyRepository;
-import com.venzpro.domain.repository.OrganizationRepository;
-import com.venzpro.domain.repository.OrderRepository;
 import com.venzpro.domain.repository.CatalogFileRepository;
+import com.venzpro.domain.repository.CompanyRepository;
+import com.venzpro.domain.repository.OrderRepository;
+import com.venzpro.domain.repository.OrganizationRepository;
 import com.venzpro.infrastructure.exception.BusinessException;
 import com.venzpro.infrastructure.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -20,17 +20,16 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CompanyService {
 
-    private final OrderRepository           orderRepository;
-    private final CatalogFileRepository     catalogFileRepository;
-    private final CompanyRepository         companyRepository;
-    private final OrganizationRepository    organizationRepository;
+    private final CompanyRepository      companyRepository;
+    private final OrganizationRepository organizationRepository;
+    private final OrderRepository        orderRepository;       // ← injetado
+    private final CatalogFileRepository  catalogFileRepository; // ← injetado
 
     @Transactional
     public CompanyResponse create(CompanyRequest req, UUID organizationId) {
         var org = organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organização", organizationId));
 
-        // Valida unicidade de CNPJ dentro da organização (quando informado)
         if (req.cnpj() != null && !req.cnpj().isBlank()) {
             if (companyRepository.existsByCnpjAndOrganizationId(req.cnpj(), organizationId)) {
                 throw new BusinessException(
@@ -60,7 +59,6 @@ public class CompanyService {
         var company = companyRepository.findByIdAndOrganizationId(id, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa", id));
 
-        // Valida unicidade de CNPJ ao atualizar (exclui o próprio registro)
         if (req.cnpj() != null && !req.cnpj().isBlank()) {
             boolean cnpjDeOutra = companyRepository
                     .existsByCnpjAndOrganizationIdAndIdNot(req.cnpj(), organizationId, id);
@@ -79,17 +77,19 @@ public class CompanyService {
         var company = companyRepository.findByIdAndOrganizationId(id, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa", id));
 
-        // Verifica dependências antes de deletar
+        // Guard 1: impede exclusão com pedidos ativos (bug A1 — auditoria)
         if (orderRepository.existsByCompanyIdAndDeletedAtIsNull(id)) {
             throw new BusinessException(
-                    "Não é possível remover empresa com pedidos associados.");
+                    "Não é possível excluir esta empresa pois ela possui pedidos associados. " +
+                            "Cancele ou conclua os pedidos antes de excluir.");
         }
 
-        // Soft-delete ou, se hard delete for intencional, informar o usuário sobre catálogos
+        // Guard 2: impede exclusão silenciosa de catálogos (cascata sem aviso)
         long arquivos = catalogFileRepository.countByCompanyId(id);
         if (arquivos > 0) {
             throw new BusinessException(
-                    "Remova os " + arquivos + " catálogo(s) desta empresa antes de excluí-la.");
+                    "A empresa possui " + arquivos + " catálogo(s) vinculado(s). " +
+                            "Remova os catálogos antes de excluir a empresa.");
         }
 
         companyRepository.delete(company);
@@ -126,7 +126,6 @@ public class CompanyService {
         company.setUf(nullIfBlank(req.uf()));
     }
 
-    /** Converte string vazia / só espaços para null antes de persistir. */
     private static String nullIfBlank(String value) {
         return (value == null || value.isBlank()) ? null : value;
     }
