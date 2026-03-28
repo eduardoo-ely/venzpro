@@ -298,33 +298,29 @@ CREATE INDEX idx_coh_customer ON customer_owner_history(customer_id, changed_at 
 
 -- ── event_participantes ───────────────────────────────────────────────────────
 CREATE TABLE events (
-                        id              UUID        NOT NULL DEFAULT gen_random_uuid(),
-                        organization_id UUID        NOT NULL,
-                        user_id         UUID        NOT NULL,
-                        customer_id     UUID,
-                        company_id      UUID,
-                        tipo            VARCHAR(20) NOT NULL CHECK (tipo IN ('VISITA','REUNIAO','FOLLOW_UP')),
-                        titulo          VARCHAR(200) NOT NULL,
-                        descricao       TEXT,
-                        data_inicio     TIMESTAMPTZ NOT NULL,
-                        data_fim        TIMESTAMPTZ,
-                        status          VARCHAR(20) NOT NULL CHECK (status IN ('AGENDADO','CONCLUIDO','CANCELADO')),
-                        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        deleted_at      TIMESTAMPTZ,
-                        CONSTRAINT pk_events      PRIMARY KEY (id),
-                        CONSTRAINT fk_events_org  FOREIGN KEY (organization_id) REFERENCES organizations(id),
-                        CONSTRAINT fk_events_user FOREIGN KEY (user_id)         REFERENCES users(id)
+                        id UUID PRIMARY KEY,
+                        user_id UUID NOT NULL REFERENCES users(id),
+                        customer_id UUID REFERENCES customers(id),
+                        company_id UUID REFERENCES companies(id),
+                        organization_id UUID NOT NULL REFERENCES organizations(id),
+                        tipo VARCHAR(50) NOT NULL,
+                        titulo VARCHAR(255) NOT NULL,
+                        descricao TEXT,
+                        data_inicio TIMESTAMP NOT NULL,
+                        data_fim TIMESTAMP,
+                        status VARCHAR(50) NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        deleted_at TIMESTAMP
+);
+
+CREATE TABLE event_participantes (
+                                     event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                                     email VARCHAR(255) NOT NULL
 );
 
 CREATE INDEX idx_events_org  ON events(organization_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_events_date ON events(organization_id, data_inicio) WHERE deleted_at IS NULL;
-
-CREATE TABLE event_participantes (
-                                     event_id UUID         NOT NULL,
-                                     email    VARCHAR(255) NOT NULL,
-                                     CONSTRAINT fk_ep_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
-);
 
 CREATE INDEX idx_ep_event ON event_participantes(event_id);
 

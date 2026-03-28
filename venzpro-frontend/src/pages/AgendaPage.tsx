@@ -63,6 +63,7 @@ type Form = {
   customerId: string; companyId: string; descricao: string;
   participantes: string[];
 };
+
 const emptyForm: Form = {
   titulo: '', tipo: 'VISITA', status: 'AGENDADO',
   dataInicio: '', dataFim: '', customerId: '', companyId: '',
@@ -73,6 +74,9 @@ export default function AgendaPage() {
   const { events, isLoading, create, update, remove } = useEvents();
   const { customers } = useCustomers();
   const { companies } = useCompanies();
+
+  const safeCustomers = Array.isArray(customers) ? customers : (customers?.content || []);
+  const safeCompanies = Array.isArray(companies) ? companies : (companies?.content || []);
 
   // Google Calendar
   const { isConnected, isSyncing, connect, disconnect, sync, pushEvent } = useGoogleCalendar();
@@ -85,7 +89,6 @@ export default function AgendaPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao conectar';
       if (!msg.includes('fechada')) {
-        // Não mostra erro se usuário fechou o popup intencionalmente
         import('@/lib/toast').then(({ notify }) => notify.error(msg));
       }
     } finally {
@@ -93,7 +96,6 @@ export default function AgendaPage() {
     }
   };
 
-  // Push evento individual para Google
   const handlePushToGoogle = async (ev: AppEvent) => {
     if (!isConnected) {
       await handleGoogleConnect();
@@ -106,6 +108,17 @@ export default function AgendaPage() {
   const [viewMode,   setViewMode] = useState<'timeline' | 'calendar'>('timeline');
   const [form,       setForm]   = useState<Form>(emptyForm);
   const [emailInput, setEmailInput] = useState('');
+
+  // ── FUNÇÃO PARA PEGAR A DATA/HORA ATUAL (FORMATO YYYY-MM-DDTHH:mm) ──
+  const getCurrentLocalDateTime = () => {
+    const now = new Date();
+    // Ajusta o fuso horário para bater com o input local
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+  const minDateTime = getCurrentLocalDateTime();
+
+  // Verifica se o evento que estamos editando ocorreu no passado
+  const isPastEvent = editing ? new Date(editing.dataInicio) < new Date() : false;
 
   const openNew  = () => { setEditing(null); setForm(emptyForm); setEmailInput(''); setOpen(true); };
   const openEdit = (ev: AppEvent) => {
@@ -123,6 +136,7 @@ export default function AgendaPage() {
   };
 
   const addParticipant = () => {
+    if (isPastEvent) return; // Bloqueia adição em eventos passados
     const email = emailInput.trim().toLowerCase();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
     if (form.participantes.includes(email)) return;
@@ -132,6 +146,17 @@ export default function AgendaPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validações de Segurança das Datas
+    if (!isPastEvent && new Date(form.dataInicio) < new Date()) {
+      import('@/lib/toast').then(({ notify }) => notify.error("Não é possível agendar eventos no passado."));
+      return;
+    }
+    if (form.dataFim && new Date(form.dataFim) < new Date(form.dataInicio)) {
+      import('@/lib/toast').then(({ notify }) => notify.error("A data de fim não pode ser anterior à data de início."));
+      return;
+    }
+
     const payload = {
       titulo:     form.titulo, tipo: form.tipo, status: form.status,
       dataInicio: form.dataInicio,
@@ -168,7 +193,6 @@ export default function AgendaPage() {
   return (
       <div className="space-y-6">
         <PageHeader title="Agenda" subtitle="Gerencie seus compromissos e visitas">
-          {/* Controles de visualização */}
           <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
             <Button variant={viewMode === 'timeline' ? 'default' : 'ghost'} size="icon"
                     className={`h-8 w-8 ${viewMode === 'timeline' ? 'gradient-primary border-0' : ''}`}
@@ -178,7 +202,6 @@ export default function AgendaPage() {
                     onClick={() => setViewMode('calendar')}><Calendar className="h-4 w-4" /></Button>
           </div>
 
-          {/* Google Calendar */}
           <Tooltip>
             <TooltipTrigger asChild>
               {isConnected ? (
@@ -194,7 +217,7 @@ export default function AgendaPage() {
                           ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           : <RefreshCw className="h-3.5 w-3.5" />
                       }
-                      {isSyncing ? 'Sincronizando...' : 'Sincronizar Google'}
+                      {isSyncing ? 'Sincronizando...' : 'Sincronizar'}
                     </Button>
                     <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={disconnect}>
                       <Link2Off className="h-3.5 w-3.5" />
@@ -286,7 +309,6 @@ export default function AgendaPage() {
                                   </div>
                                   <Badge variant="outline" className={`${sc.class} text-[10px] font-semibold`}>{sc.label}</Badge>
                                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {/* Botão push para Google */}
                                     {isConnected && (
                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-[hsl(217,91%,60%)]"
                                                 title="Exportar para Google Calendar"
@@ -362,17 +384,30 @@ export default function AgendaPage() {
             </Card>
         )}
 
-        {/* Modal — criar / editar evento */}
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent className="border-glow bg-card max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>{editing ? 'Editar Evento' : 'Novo Evento'}</DialogTitle></DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2"><Label>Título *</Label><Input value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} required className="bg-muted border-border/50" /></div>
+            <DialogHeader>
+              <DialogTitle>
+                {editing ? (isPastEvent ? 'Detalhes do Evento' : 'Editar Evento') : 'Novo Evento'}
+              </DialogTitle>
+              {isPastEvent && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Este evento já ocorreu. Você pode apenas atualizar a observação e alterar o status.
+                  </p>
+              )}
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+
+              <div className="space-y-2">
+                <Label>Título *</Label>
+                <Input value={form.titulo} disabled={isPastEvent} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} required className="bg-muted border-border/50 disabled:opacity-75" />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Tipo *</Label>
-                  <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as EventType }))}>
-                    <SelectTrigger className="bg-muted border-border/50"><SelectValue /></SelectTrigger>
+                  <Select disabled={isPastEvent} value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as EventType }))}>
+                    <SelectTrigger className="bg-muted border-border/50 disabled:opacity-75"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="VISITA">Visita</SelectItem>
                       <SelectItem value="REUNIAO">Reunião</SelectItem>
@@ -392,52 +427,83 @@ export default function AgendaPage() {
                   </Select>
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Data Início *</Label><Input type="datetime-local" value={form.dataInicio} onChange={e => setForm(f => ({ ...f, dataInicio: e.target.value }))} required className="bg-muted border-border/50" /></div>
-                <div className="space-y-2"><Label>Data Fim</Label><Input type="datetime-local" value={form.dataFim} onChange={e => setForm(f => ({ ...f, dataFim: e.target.value }))} className="bg-muted border-border/50" /></div>
+                <div className="space-y-2">
+                  <Label>Data Início *</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                        type="datetime-local"
+                        value={form.dataInicio}
+                        disabled={isPastEvent}
+                        min={!isPastEvent ? minDateTime : undefined}
+                        onChange={e => setForm(f => ({ ...f, dataInicio: e.target.value }))}
+                        required
+                        className="pl-9 bg-muted border-border/50 disabled:opacity-75"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Data Fim</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                        type="datetime-local"
+                        value={form.dataFim}
+                        disabled={isPastEvent}
+                        min={form.dataInicio || (!isPastEvent ? minDateTime : undefined)}
+                        onChange={e => setForm(f => ({ ...f, dataFim: e.target.value }))}
+                        className="pl-9 bg-muted border-border/50 disabled:opacity-75"
+                    />
+                  </div>
+                </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Cliente</Label>
-                  <Select value={form.customerId || '__none__'} onValueChange={v => setForm(f => ({ ...f, customerId: v === '__none__' ? '' : v }))}>
-                    <SelectTrigger className="bg-muted border-border/50"><SelectValue placeholder="Opcional" /></SelectTrigger>
+                  <Select disabled={isPastEvent} value={form.customerId || '__none__'} onValueChange={v => setForm(f => ({ ...f, customerId: v === '__none__' ? '' : v }))}>
+                    <SelectTrigger className="bg-muted border-border/50 disabled:opacity-75"><SelectValue placeholder="Opcional" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">Nenhum</SelectItem>
-                      {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                      {safeCustomers.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Empresa</Label>
-                  <Select value={form.companyId || '__none__'} onValueChange={v => setForm(f => ({ ...f, companyId: v === '__none__' ? '' : v }))}>
-                    <SelectTrigger className="bg-muted border-border/50"><SelectValue placeholder="Opcional" /></SelectTrigger>
+                  <Select disabled={isPastEvent} value={form.companyId || '__none__'} onValueChange={v => setForm(f => ({ ...f, companyId: v === '__none__' ? '' : v }))}>
+                    <SelectTrigger className="bg-muted border-border/50 disabled:opacity-75"><SelectValue placeholder="Opcional" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">Nenhuma</SelectItem>
-                      {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                      {safeCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              {/* Participantes */}
               <div className="space-y-2">
                 <Label>Participantes</Label>
                 <div className="flex gap-2">
-                  <Input value={emailInput} onChange={e => setEmailInput(e.target.value)}
+                  <Input value={emailInput} disabled={isPastEvent} onChange={e => setEmailInput(e.target.value)}
                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addParticipant(); } }}
-                         placeholder="email@exemplo.com" className="bg-muted border-border/50 flex-1" />
-                  <Button type="button" variant="outline" onClick={addParticipant} className="shrink-0">Adicionar</Button>
+                         placeholder={isPastEvent ? 'Bloqueado' : 'email@exemplo.com'} className="bg-muted border-border/50 flex-1 disabled:opacity-75" />
+                  <Button type="button" variant="outline" disabled={isPastEvent} onClick={addParticipant} className="shrink-0">Adicionar</Button>
                 </div>
                 {form.participantes.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {form.participantes.map(email => (
-                          <span key={email} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                          <span key={email} className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border ${isPastEvent ? 'bg-muted text-muted-foreground border-border/50' : 'bg-primary/10 text-primary border-primary/20'}`}>
                       {email}
-                            <button type="button"
-                                    onClick={() => setForm(f => ({ ...f, participantes: f.participantes.filter(e => e !== email) }))}
-                                    className="hover:text-destructive transition-colors">
-                        <X className="h-3 w-3" />
-                      </button>
+                            {!isPastEvent && (
+                                <button type="button"
+                                        onClick={() => setForm(f => ({ ...f, participantes: f.participantes.filter(e => e !== email) }))}
+                                        className="hover:text-destructive transition-colors">
+                                  <X className="h-3 w-3" />
+                                </button>
+                            )}
                     </span>
                       ))}
                     </div>
@@ -445,12 +511,12 @@ export default function AgendaPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Descrição</Label>
-                <Textarea value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} className="bg-muted border-border/50" rows={3} />
+                <Label>Observação (Descrição)</Label>
+                <Textarea value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} placeholder={isPastEvent ? "Adicione os detalhes de como foi a reunião..." : ""} className="bg-muted border-border/50" rows={3} />
               </div>
 
               <Button type="submit" className="w-full gradient-primary border-0 text-white" disabled={isPending}>
-                {isPending ? 'Salvando...' : editing ? 'Salvar' : 'Criar Evento'}
+                {isPending ? 'Salvando...' : editing ? 'Salvar Alterações' : 'Criar Evento'}
               </Button>
             </form>
           </DialogContent>
