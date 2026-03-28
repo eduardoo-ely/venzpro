@@ -13,9 +13,11 @@ export function useEvents() {
   });
 
   const create = useMutation({
-    mutationFn: (d: EventPayload) => eventsApi.create(d),
-    onSuccess:  () => { qc.invalidateQueries({ queryKey: KEY }); notify.success('Evento criado!'); },
-    onError:    (e) => notify.apiError(e, 'Erro ao criar evento.'),
+    mutationFn: (payload) => eventsApi.create(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['events'] });
+      notify.success('Evento criado!');
+    },
   });
 
   const update = useMutation({
@@ -31,7 +33,7 @@ export function useEvents() {
   });
 
   return {
-    events:     query.data ?? [],
+    events: Array.isArray(query.data) ? query.data : (query.data?.content ?? []),
     isLoading:  query.isLoading,
     isError:    query.isError,
     create,

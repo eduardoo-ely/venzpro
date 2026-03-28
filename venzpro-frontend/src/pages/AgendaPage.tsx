@@ -32,22 +32,28 @@ const statusConfig: Record<EventStatus, { label: string; class: string }> = {
 };
 
 function groupByDate(events: AppEvent[]) {
-  const today    = new Date(); today.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-  const endOfWeek= new Date(today); endOfWeek.setDate(endOfWeek.getDate() + 7);
+  const endOfWeek = new Date(today); endOfWeek.setDate(endOfWeek.getDate() + 7);
+
   const groups: { label: string; events: AppEvent[] }[] = [
+    { label: 'Atrasados / Histórico', events: [] },
     { label: 'Hoje', events: [] },
     { label: 'Amanhã', events: [] },
     { label: 'Esta Semana', events: [] },
     { label: 'Futuro', events: [] },
   ];
+
   [...events].sort((a, b) => new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime()).forEach(ev => {
     const d = new Date(ev.dataInicio); d.setHours(0, 0, 0, 0);
-    if      (d.getTime() === today.getTime())    groups[0].events.push(ev);
-    else if (d.getTime() === tomorrow.getTime()) groups[1].events.push(ev);
-    else if (d < endOfWeek)                      groups[2].events.push(ev);
-    else                                         groups[3].events.push(ev);
+
+    if      (d.getTime() < today.getTime())      groups[0].events.push(ev);
+    else if (d.getTime() === today.getTime())    groups[1].events.push(ev);
+    else if (d.getTime() === tomorrow.getTime()) groups[2].events.push(ev);
+    else if (d < endOfWeek)                      groups[3].events.push(ev);
+    else                                         groups[4].events.push(ev);
   });
+
   return groups.filter(g => g.events.length > 0);
 }
 

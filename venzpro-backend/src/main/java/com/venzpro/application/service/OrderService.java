@@ -76,7 +76,6 @@ public class OrderService {
         order.setOrganizationId(organizationId);
 
         aplicarItens(order, req.items(), organizationId);
-
         order.recalcularTotal();
 
         var saved = orderRepository.save(order);
@@ -84,11 +83,8 @@ public class OrderService {
         registrarHistoricoStatus(saved, null, OrderStatus.ORCAMENTO, userId, "Pedido criado via API");
 
         auditService.log(
-                organizationId,
-                userId,
-                AuditService.CREATE_ORDER,
-                "Pedido",
-                saved.getId(),
+                organizationId, userId, AuditService.CREATE_ORDER,
+                "Pedido", saved.getId(),
                 "Cliente: " + customer.getNome() + " | Total: " + saved.getValorTotal()
         );
 
@@ -102,11 +98,9 @@ public class OrderService {
     @Transactional
     public OrderResponse update(UUID id, OrderRequest req, UUID userId,
                                 UUID organizationId, UserRole role) {
-
         validarRequest(req);
 
         var order = buscarPedidoPorOrg(id, organizationId);
-
         validarOwnerPedido(order, userId, role);
         validarPedidoEditavel(order, id, userId, organizationId);
 
@@ -122,55 +116,36 @@ public class OrderService {
 
         aplicarItens(order, req.items(), organizationId);
 
-        auditService.log(
-                organizationId,
-                userId,
-                AuditService.UPDATE_ORDER,
-                "Pedido",
-                id,
-                "Cliente: " + customer.getNome()
-        );
+        auditService.log(organizationId, userId, AuditService.UPDATE_ORDER,
+                "Pedido", id, "Cliente: " + customer.getNome());
 
         return OrderResponse.from(orderRepository.save(order));
     }
 
     // ─────────────────────────────────────────────────────────────
-    // READ (BUSCAS)
+    // READ
     // ─────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public Page<OrderResponse> findAll(UUID organizationId, UUID userId, UserRole role, OrderStatus status, Pageable pageable) {
-        Page<Order> ordersPage;
-
+    public Page<OrderResponse> findAll(UUID organizationId, UUID userId, UserRole role,
+                                       OrderStatus status, Pageable pageable) {
+        Page<Order> page;
         if (role == UserRole.VENDEDOR) {
-            if (status != null) {
-                // Passando o pageable no final da chamada do repositório
-                ordersPage = orderRepository.findAllByOrganizationIdAndStatusAndUserIdAndDeletedAtIsNull(organizationId, status, userId, pageable);
-            } else {
-                // Passando o pageable no final da chamada do repositório
-                ordersPage = orderRepository.findAllByOrganizationIdAndUserIdAndDeletedAtIsNull(organizationId, userId, pageable);
-            }
+            page = status != null
+                    ? orderRepository.findAllByOrganizationIdAndStatusAndUserIdAndDeletedAtIsNull(organizationId, status, userId, pageable)
+                    : orderRepository.findAllByOrganizationIdAndUserIdAndDeletedAtIsNull(organizationId, userId, pageable);
         } else {
-            if (status != null) {
-                // Passando o pageable no final da chamada do repositório
-                ordersPage = orderRepository.findAllByOrganizationIdAndStatusAndDeletedAtIsNull(organizationId, status, pageable);
-            } else {
-                // Passando o pageable no final da chamada do repositório
-                ordersPage = orderRepository.findAllByOrganizationIdAndDeletedAtIsNull(organizationId, pageable);
-            }
+            page = status != null
+                    ? orderRepository.findAllByOrganizationIdAndStatusAndDeletedAtIsNull(organizationId, status, pageable)
+                    : orderRepository.findAllByOrganizationIdAndDeletedAtIsNull(organizationId, pageable);
         }
-
-        return ordersPage.map(OrderResponse::from);
+        return page.map(OrderResponse::from);
     }
 
     @Transactional(readOnly = true)
     public OrderResponse findById(UUID id, UUID organizationId, UUID userId, UserRole role) {
-        // O helper interno já filtra por organização e garante que não está deletado
         var order = buscarPedidoPorOrg(id, organizationId);
-
-        // A trava de segurança: se for vendedor, valida se ele é o dono do pedido
         validarOwnerPedido(order, userId, role);
-
         return OrderResponse.from(order);
     }
 
@@ -181,7 +156,6 @@ public class OrderService {
     @Transactional
     public OrderResponse updateStatus(UUID id, UUID userId, UUID organizationId,
                                       UserRole role, OrderStatusRequest req) {
-
         if (req == null || req.status() == null) {
             throw new BusinessException("Status é obrigatório.");
         }
@@ -196,7 +170,7 @@ public class OrderService {
 
         var changedBy = buscarUsuarioPorOrg(userId, organizationId);
 
-        // Trava: Vendedor não pode aprovar os próprios pedidos
+        // Apenas ADMIN e GERENTE podem aprovar
         if (novoStatus == OrderStatus.APROVADO && role == UserRole.VENDEDOR) {
             throw new BusinessException("Apenas Gerentes ou Admins podem APROVAR um pedido.");
         }
@@ -208,13 +182,11 @@ public class OrderService {
         }
 
         var saved = orderRepository.save(order);
-
         registrarHistoricoStatus(saved, statusAtual, novoStatus, userId, req.motivo());
 
-        auditService.log(organizationId, userId,
-            AuditService.UPDATE_STATUS, "Pedido", id,
-            statusAtual + " → " + novoStatus +
-            (req.motivo() != null ? " | Motivo: " + req.motivo() : ""));
+        auditService.log(organizationId, userId, AuditService.UPDATE_STATUS, "Pedido", id,
+                statusAtual + " → " + novoStatus +
+                        (req.motivo() != null ? " | Motivo: " + req.motivo() : ""));
 
         return OrderResponse.from(saved);
     }
@@ -227,7 +199,6 @@ public class OrderService {
     public void delete(UUID id, UUID organizationId, UUID userId, UserRole role) {
         var order = buscarPedidoPorOrg(id, organizationId);
         validarOwnerPedido(order, userId, role);
-
         order.softDelete();
         orderRepository.save(order);
     }
@@ -237,131 +208,100 @@ public class OrderService {
     // ─────────────────────────────────────────────────────────────
 
     private void validarRequest(OrderRequest req) {
-        if (req == null) {
-            throw new BusinessException("Requisição inválida.");
-        }
-
-        if (req.customerId() == null) {
-            throw new BusinessException("Cliente é obrigatório.");
-        }
-
-        if (req.items() == null || req.items().isEmpty()) {
-            throw new BusinessException("O pedido deve conter ao menos um item.");
-        }
+        if (req == null)                            throw new BusinessException("Requisição inválida.");
+        if (req.customerId() == null)               throw new BusinessException("Cliente é obrigatório.");
+        if (req.items() == null || req.items().isEmpty()) throw new BusinessException("O pedido deve conter ao menos um item.");
     }
 
-    private void validarCriacaoPedido(Customer customer, User user, UUID companyId, UUID organizationId) {
-
+    private void validarCriacaoPedido(Customer customer, User user,
+                                      UUID companyId, UUID organizationId) {
         if (customer.getStatus() != CustomerStatus.APROVADO) {
-            throw new BusinessException("Cliente não está aprovado.");
+            throw new BusinessException("Cliente não está aprovado. Status atual: " + customer.getStatus());
         }
 
-        validarClienteParaPedido(customer, user);
+        // ── FIX Passo 1-A: ADMIN pode criar pedidos para qualquer cliente aprovado ──
+        // ADMIN não precisa ser dono da carteira nem ter cliente atribuído a si.
+        // GERENTE também tem liberdade total de criação.
+        if (user.getRole() != UserRole.ADMIN && user.getRole() != UserRole.GERENTE) {
+            validarClienteParaVendedor(customer, user);
+        }
+
+        // ── FIX Passo 1-B: Vínculo implícito para empresas da própria organização ──
+        // Se a empresa foi cadastrada pela própria organização do representante,
+        // não é necessário um acordo formal de ecossistema.
+        // Um acordo formal só é exigido quando a empresa pertence a OUTRA organização.
         validarAcordoEmpresa(companyId, organizationId);
     }
 
-    private void validarPedidoEditavel(Order order, UUID id, UUID userId, UUID organizationId) {
-
-        if (order.getStatus() != OrderStatus.ORCAMENTO) {
-
-            auditService.logError(
-                    organizationId,
-                    userId,
-                    AuditService.UPDATE_ORDER,
-                    "Edição negada — pedido " + id + " em status " + order.getStatus()
-            );
-
+    private void validarClienteParaVendedor(Customer customer, User user) {
+        if (customer.getOwner() == null) {
             throw new BusinessException(
-                    "Somente pedidos em ORÇAMENTO podem ser editados. " +
-                            "Status atual: " + order.getStatus() + "."
-            );
+                    "O cliente \"" + customer.getNome() + "\" não possui responsável atribuído. " +
+                            "Atribua um responsável antes de criar o pedido.");
+        }
+        if (!customer.getOwner().getId().equals(user.getId())) {
+            throw new TenantViolationException(
+                    "Você não pode criar pedidos para clientes de outro vendedor.");
+        }
+    }
+
+    private void validarPedidoEditavel(Order order, UUID id, UUID userId, UUID organizationId) {
+        if (order.getStatus() != OrderStatus.ORCAMENTO) {
+            auditService.logError(organizationId, userId, AuditService.UPDATE_ORDER,
+                    "Edição negada — pedido " + id + " em status " + order.getStatus());
+            throw new BusinessException(
+                    "Somente pedidos em ORÇAMENTO podem ser editados. Status atual: " + order.getStatus());
         }
     }
 
     private void validarTransicaoStatus(OrderStatus atual, OrderStatus novo, String motivo) {
-
-        if (atual == OrderStatus.CONCLUIDO) {
-            throw new BusinessException(
-                    "Pedidos CONCLUÍDOS não podem ser alterados. " +
-                            "Este é um status terminal — o pedido foi finalizado com sucesso."
-            );
-        }
-
-        if (atual == OrderStatus.CANCELADO) {
-            throw new BusinessException(
-                    "Pedidos CANCELADOS não podem ser alterados. " +
-                            "Este é um status terminal."
-            );
-        }
-
-        if (atual == OrderStatus.REJEITADO) {
-            throw new BusinessException(
-                    "Pedidos REJEITADOS não podem ser alterados. " +
-                            "Este é um status terminal."
-            );
-        }
+        if (atual == OrderStatus.CONCLUIDO)
+            throw new BusinessException("Pedidos CONCLUÍDOS não podem ser alterados.");
+        if (atual == OrderStatus.CANCELADO)
+            throw new BusinessException("Pedidos CANCELADOS não podem ser alterados.");
+        if (atual == OrderStatus.REJEITADO)
+            throw new BusinessException("Pedidos REJEITADOS não podem ser alterados.");
 
         var permitidos = TRANSICOES_VALIDAS.get(atual);
-
         if (permitidos == null || !permitidos.contains(novo)) {
             throw new BusinessException(
-                    "Transição inválida: " + atual + " → " + novo + ". " +
-                            "Transições permitidas a partir de " + atual + ": " +
-                            (permitidos == null || permitidos.isEmpty() ? "nenhuma" : permitidos)
-            );
+                    "Transição inválida: " + atual + " → " + novo +
+                            ". Permitidas: " + (permitidos == null || permitidos.isEmpty() ? "nenhuma" : permitidos));
         }
-
         if (novo == OrderStatus.CANCELADO && atual == OrderStatus.APROVADO) {
-            if (motivo == null || motivo.isBlank()) {
-                throw new BusinessException(
-                        "O motivo é obrigatório ao cancelar um pedido já APROVADO."
-                );
-            }
+            if (motivo == null || motivo.isBlank())
+                throw new BusinessException("O motivo é obrigatório ao cancelar um pedido já APROVADO.");
         }
     }
 
     private void validarOwnerPedido(Order order, UUID userId, UserRole role) {
-        if (role == UserRole.VENDEDOR &&
-                !order.getUser().getId().equals(userId)) {
-            throw new TenantViolationException("Sem permissão.");
+        // ADMIN e GERENTE veem todos os pedidos da organização
+        if (role == UserRole.ADMIN || role == UserRole.GERENTE) return;
+        if (!order.getUser().getId().equals(userId)) {
+            throw new TenantViolationException("Sem permissão para acessar este pedido.");
         }
     }
 
-    private void validarClienteParaPedido(Customer customer, User user) {
-
-        if (customer.getStatus() != CustomerStatus.APROVADO) {
-            throw new BusinessException(
-                    "Cliente precisa estar APROVADO para gerar pedido. " +
-                            "Status atual: " + customer.getStatus() + ". " +
-                            "Solicite a aprovação ao gerente ou administrador."
-            );
-        }
-
-        if (customer.getOwner() == null) {
-            throw new BusinessException(
-                    "O cliente \"" + customer.getNome() + "\" não possui responsável atribuído. " +
-                            "Atribua um responsável antes de criar o pedido."
-            );
-        }
-
-        if (user.getRole() == UserRole.VENDEDOR &&
-                !customer.getOwner().getId().equals(user.getId())) {
-
-            throw new TenantViolationException(
-                    "Você não pode criar pedidos para clientes de outro vendedor."
-            );
-        }
-    }
-
+    /**
+     * Valida se a organização pode vender produtos desta empresa.
+     *
+     * Regra de negócio (Passo 1-B):
+     * - Se a empresa pertence à MESMA organização do representante → VÍNCULO IMPLÍCITO → permitido.
+     * - Se a empresa pertence a OUTRA organização → exige acordo formal ativo no ecossistema.
+     * - Se companyId for null → permitido (produto global, sem empresa vinculada).
+     */
     private void validarAcordoEmpresa(UUID companyId, UUID organizationId) {
+        if (companyId == null) return;
 
-        if (companyId != null &&
-                !agreementService.hasActiveAgreement(organizationId, companyId)) {
+        // Verifica se a empresa foi cadastrada pela própria organização (vínculo implícito)
+        boolean empresaDaOrg = companyRepository.existsByIdAndOrganizationId(companyId, organizationId);
+        if (empresaDaOrg) return; // Vínculo implícito — sem necessidade de acordo formal
 
+        // Empresa de outra organização → exige acordo formal
+        if (!agreementService.hasActiveAgreement(organizationId, companyId)) {
             throw new BusinessException(
-                    "Sua organização não possui um acordo ativo para vender " +
-                            "produtos desta empresa."
-            );
+                    "Sua organização não possui um acordo ativo para vender produtos desta empresa. " +
+                            "Solicite um convite à empresa fornecedora ou cadastre a empresa localmente.");
         }
     }
 
@@ -369,68 +309,36 @@ public class OrderService {
     // ITENS
     // ─────────────────────────────────────────────────────────────
 
-    private List<OrderItem> criarItens(Order order, List<OrderItemRequest> items, UUID organizationId) {
-
-        return items.stream().map(itemReq -> {
-
-            var product = productRepository
-                    .findByIdAndOrganizationId(itemReq.productId(), organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Produto", itemReq.productId()));
-
-            if (product.getPrecoBase() == null) {
-                throw new BusinessException("Produto sem preço.");
-            }
-
-            return OrderItem.builder()
-                    .order(order)
-                    .product(product)
-                    .quantidade(itemReq.quantidade())
-                    .precoUnitario(product.getPrecoBase())
-                    .build();
-
-        }).toList();
-    }
-
     private void aplicarItens(Order order, List<OrderItemRequest> items, UUID organizationId) {
-        if (items == null || items.isEmpty()) {
+        if (items == null || items.isEmpty())
             throw new BusinessException("O pedido deve conter ao menos um item.");
-        }
 
-        // Salva uma cópia rápida dos itens atuais para buscar o preço histórico
         var itensAntigos = order.getItens().stream()
                 .collect(Collectors.toMap(item -> item.getProduct().getId(), OrderItem::getPrecoUnitario));
 
         order.clearItens();
 
         for (OrderItemRequest req : items) {
-            if (req.quantidade() == null || req.quantidade().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+            if (req.quantidade() == null || req.quantidade().compareTo(java.math.BigDecimal.ZERO) <= 0)
                 throw new BusinessException("A quantidade dos itens deve ser maior que zero.");
-            }
 
             var product = productRepository
                     .findByIdAndOrganizationId(req.productId(), organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Produto", req.productId()));
 
-            // MÁGICA AQUI: Se o item já existia neste pedido, mantém o preço da época.
-            // Só busca o preço base atual se for um produto adicionado hoje.
             var precoVenda = itensAntigos.containsKey(product.getId())
                     ? itensAntigos.get(product.getId())
                     : product.getPrecoBase();
 
-            if (precoVenda == null) {
-                throw new BusinessException(
-                        "O produto '" + product.getNome() + "' não pode ser vendido sem preço definido."
-                );
-            }
+            if (precoVenda == null)
+                throw new BusinessException("O produto '" + product.getNome() + "' não tem preço definido.");
 
-            order.addItem(
-                    OrderItem.builder()
-                            .order(order)
-                            .product(product)
-                            .quantidade(req.quantidade())
-                            .precoUnitario(precoVenda)
-                            .build()
-            );
+            order.addItem(OrderItem.builder()
+                    .order(order)
+                    .product(product)
+                    .quantidade(req.quantidade())
+                    .precoUnitario(precoVenda)
+                    .build());
         }
 
         order.recalcularTotal();
@@ -440,18 +348,12 @@ public class OrderService {
     // HELPERS
     // ─────────────────────────────────────────────────────────────
 
-    private void registrarHistoricoStatus(Order order, OrderStatus de, OrderStatus para, UUID userId, String motivo) {
+    private void registrarHistoricoStatus(Order order, OrderStatus de, OrderStatus para,
+                                          UUID userId, String motivo) {
         var user = buscarUsuarioPorOrg(userId, order.getOrganizationId());
-
-        statusHistoryRepository.save(
-                OrderStatusHistory.builder()
-                        .order(order)
-                        .oldStatus(de)
-                        .newStatus(para)
-                        .changedBy(user)
-                        .motivo(motivo)
-                        .build()
-        );
+        statusHistoryRepository.save(OrderStatusHistory.builder()
+                .order(order).oldStatus(de).newStatus(para)
+                .changedBy(user).motivo(motivo).build());
     }
 
     private Order buscarPedidoPorOrg(UUID id, UUID organizationId) {
