@@ -24,9 +24,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class InviteService {
 
-    private final UserRepository         userRepository;
+    private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
-    private final PasswordEncoder        passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
 
     /**
      * Cria um novo usuário na organização do ADMIN autenticado.
@@ -53,24 +53,30 @@ public class InviteService {
         // Gera senha temporária segura (12 chars, URL-safe)
         String tempPassword = generateSecureToken(12);
 
+        // Bloco único de criação do usuário
         var user = User.builder()
                 .nome(req.nome())
                 .email(emailNormalizado)
                 .senha(passwordEncoder.encode(tempPassword))
                 .role(req.role() != null ? req.role() : UserRole.VENDEDOR)
-                .organization(org)
                 .mustChangePassword(true)
-                // Permissões padrão — podem ser ajustadas pelo ADMIN depois
                 .podeAprovar(false)
                 .podeExportar(false)
                 .podeVerDashboard(false)
                 .build();
 
+        // ── O SEGREDO ESTÁ AQUI ──
+        // Seta o ID da organização no campo herdado do BaseTenantEntity
+        user.setOrganizationId(orgId);
+
+        // Mantém a referência do objeto viva na memória
+        user.setOrganization(org);
+
         user = userRepository.save(user);
 
         log.info(
-            "Usuário convidado: {} ({}) na org {} pelo ADMIN",
-            user.getEmail(), user.getRole(), orgId
+                "Usuário convidado: {} ({}) na org {} pelo ADMIN",
+                user.getEmail(), user.getRole(), orgId
         );
 
         // TODO: enviar e-mail com senha temporária (integração futura)

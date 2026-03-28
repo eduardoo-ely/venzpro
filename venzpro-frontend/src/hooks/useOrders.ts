@@ -19,6 +19,10 @@ export function useOrders(statusFilter?: OrderStatus) {
     queryFn:  () => ordersApi.list(statusFilter),
   });
 
+  const orders = Array.isArray(query.data)
+      ? query.data
+      : (query.data?.content ?? []);
+
   const create = useMutation({
     mutationFn: (payload: CreateOrderPayload) => ordersApi.create(payload),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: KEY }); notify.success('Pedido criado!'); },
@@ -46,9 +50,10 @@ export function useOrders(statusFilter?: OrderStatus) {
   });
 
   return {
-    orders: Array.isArray(query.data) ? query.data : (query.data?.content ?? []),
-    isLoading: query.isLoading,
-    isError: query.isError,
+    orders,
+    isLoading:   query.isLoading,
+    isError:     query.isError,
+    create,
     createOrder: create,
     update,
     updateStatus,

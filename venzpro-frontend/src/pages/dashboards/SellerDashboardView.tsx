@@ -8,34 +8,36 @@ import { DollarSign, ShoppingCart, Target, Medal, Calendar as CalendarIcon } fro
 import type { Order, Event } from '@/types';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
+
 interface SellerDashboardViewProps {
     orders: Order[];
     events: Event[];
-    config: {
-        metaMensalOuro: number;
-        metaMensalDiamante: number;
-        taxaBase: number;
-        taxaOuro: number;
-        taxaDiamante: number;
-    };
 }
 
+// ── Constantes de meta ────────────────────────────────────────────────────────
+
+const META_MENSAL_OURO     = 50_000;
+const META_MENSAL_DIAMANTE = 100_000;
+const TAXA_BASE            = 0.03;
+const TAXA_OURO            = 0.05;
+const TAXA_DIAMANTE        = 0.07;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
 const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
-// ── Componente ────────────────────────────────────────────────────────────────
-export function SellerDashboardView({ orders, events, config }: SellerDashboardViewProps) {
+function calcComissao(faturado: number) {
+    if (faturado >= META_MENSAL_DIAMANTE)
+        return { taxa: TAXA_DIAMANTE, valor: faturado * TAXA_DIAMANTE, nivel: 'Diamante' };
+    if (faturado >= META_MENSAL_OURO)
+        return { taxa: TAXA_OURO, valor: faturado * TAXA_OURO, nivel: 'Ouro' };
+    return { taxa: TAXA_BASE, valor: faturado * TAXA_BASE, nivel: 'Base' };
+}
 
-    const calcComissao = (faturado: number) => {
-        if (faturado >= config.metaMensalDiamante) {
-            return { taxa: config.taxaDiamante, valor: faturado * config.taxaDiamante, nivel: 'Diamante' };
-        }
-        if (faturado >= config.metaMensalOuro) {
-            return { taxa: config.taxaOuro, valor: faturado * config.taxaOuro, nivel: 'Ouro' };
-        }
-        return { taxa: config.taxaBase, valor: faturado * config.taxaBase, nivel: 'Base' };
-    };
+// ── Componente ────────────────────────────────────────────────────────────────
+
+export function SellerDashboardView({ orders, events }: SellerDashboardViewProps) {
 
     const stats = useMemo(() => {
         const faturado = orders
@@ -50,16 +52,18 @@ export function SellerDashboardView({ orders, events, config }: SellerDashboardV
         const comissao    = calcComissao(faturado);
 
         return { faturado, emNegociacao, totalVendas, comissao };
-    }, [orders, config]);
+    }, [orders]);
 
-    // Progresso até as metas
-    const progressoOuro     = Math.min((stats.faturado / META_MENSAL_OURO)     * 100, 100);
+    // Progresso até as metas — Math.min/max na ordem correta
+    const progressoOuro = Math.min((stats.faturado / META_MENSAL_OURO) * 100, 100);
     const progressoDiamante = Math.min(
-        Math.max((stats.faturado - META_MENSAL_OURO) / (META_MENSAL_DIAMANTE - META_MENSAL_OURO) * 100, 0),
+        Math.max(
+            (stats.faturado - META_MENSAL_OURO) / (META_MENSAL_DIAMANTE - META_MENSAL_OURO) * 100,
+            0
+        ),
         100
     );
 
-    // Eventos agendados (próximos, ordenados por data)
     const proximosEventos = useMemo(() =>
             events
                 .filter(e => e.status === 'AGENDADO')
@@ -70,115 +74,60 @@ export function SellerDashboardView({ orders, events, config }: SellerDashboardV
 
     return (
         <div className="space-y-6">
-
-            {/* KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard
-                    title="Meu faturamento"
-                    value={formatCurrency(stats.faturado)}
-                    sub="Pedidos concluídos"
-                    icon={DollarSign}
-                    iconClass="text-emerald-500"
-                />
-                <KpiCard
-                    title={`Comissão ${stats.comissao.nivel} (${(stats.comissao.taxa * 100).toFixed(0)}%)`}
-                    value={formatCurrency(stats.comissao.valor)}
-                    sub="Baseado no faturado"
-                    icon={Medal}
-                    iconClass="text-amber-500"
-                />
-                <KpiCard
-                    title="Em negociação"
-                    value={formatCurrency(stats.emNegociacao)}
-                    sub="Orçamento + enviado + aprovado"
-                    icon={Target}
-                    iconClass="text-primary"
-                />
-                <KpiCard
-                    title="Vendas fechadas"
-                    value={String(stats.totalVendas)}
-                    sub="Pedidos concluídos"
-                    icon={ShoppingCart}
-                    iconClass="text-violet-500"
-                />
+                <KpiCard title="Meu faturamento"   value={formatCurrency(stats.faturado)}      sub="Pedidos concluídos"                    icon={DollarSign}  iconClass="text-emerald-500" />
+                <KpiCard title={`Comissão ${stats.comissao.nivel} (${(stats.comissao.taxa * 100).toFixed(0)}%)`} value={formatCurrency(stats.comissao.valor)} sub="Baseado no faturado" icon={Medal} iconClass="text-amber-500" />
+                <KpiCard title="Em negociação"     value={formatCurrency(stats.emNegociacao)}  sub="Orçamento + enviado + aprovado"        icon={Target}      iconClass="text-primary"     />
+                <KpiCard title="Vendas fechadas"   value={String(stats.totalVendas)}           sub="Pedidos concluídos"                    icon={ShoppingCart} iconClass="text-violet-500"  />
             </div>
 
-            {/* Metas + Agenda */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                {/* Metas */}
                 <Card className="lg:col-span-2 border-glow bg-card">
                     <CardHeader>
                         <CardTitle className="text-base flex items-center gap-2">
-                            <Target className="h-4 w-4 text-destructive" />
-                            Minhas metas do mês
+                            <Target className="h-4 w-4 text-destructive" />Minhas metas do mês
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <div className="space-y-2">
                             <div className="flex justify-between text-sm">
                                 <span>Meta Ouro — 5% de comissão</span>
-                                <span className="tabular-nums font-medium">
-                  {progressoOuro.toFixed(0)}% de {formatCurrency(META_MENSAL_OURO)}
-                </span>
+                                <span className="tabular-nums font-medium">{progressoOuro.toFixed(0)}% de {formatCurrency(META_MENSAL_OURO)}</span>
                             </div>
                             <Progress value={progressoOuro} className="h-2.5" />
                         </div>
-
                         <div className="space-y-2">
                             <div className={`flex justify-between text-sm ${progressoOuro < 100 ? 'opacity-40' : ''}`}>
                                 <span>Meta Diamante — 7% de comissão</span>
-                                <span className="tabular-nums font-medium">
-                  {progressoDiamante.toFixed(0)}% de {formatCurrency(META_MENSAL_DIAMANTE)}
-                </span>
+                                <span className="tabular-nums font-medium">{progressoDiamante.toFixed(0)}% de {formatCurrency(META_MENSAL_DIAMANTE)}</span>
                             </div>
-                            <Progress
-                                value={progressoDiamante}
-                                className={`h-2.5 ${progressoOuro < 100 ? 'opacity-40' : ''}`}
-                            />
+                            <Progress value={progressoDiamante} className={`h-2.5 ${progressoOuro < 100 ? 'opacity-40' : ''}`} />
                         </div>
-
-                        {/* Status atual */}
                         <div className="p-3 rounded-lg bg-muted/30 border border-border/30 text-sm text-muted-foreground">
-                            Nível atual:{' '}
-                            <span className="font-semibold text-foreground">{stats.comissao.nivel}</span>
+                            Nível atual: <span className="font-semibold text-foreground">{stats.comissao.nivel}</span>
                             {' '}— comissão de{' '}
-                            <span className="font-semibold text-foreground">
-                {(stats.comissao.taxa * 100).toFixed(0)}%
-              </span>
+                            <span className="font-semibold text-foreground">{(stats.comissao.taxa * 100).toFixed(0)}%</span>
                             {' '}sobre {formatCurrency(stats.faturado)} faturados.
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* Próximos eventos */}
                 <Card className="border-glow bg-card">
                     <CardHeader>
                         <CardTitle className="text-base flex items-center gap-2">
-                            <CalendarIcon className="h-4 w-4 text-primary" />
-                            Minha agenda
+                            <CalendarIcon className="h-4 w-4 text-primary" />Minha agenda
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="p-0">
                         <ScrollArea className="h-[220px]">
                             {proximosEventos.length === 0 ? (
-                                <p className="p-6 text-center text-muted-foreground text-sm">
-                                    Nenhum evento agendado
-                                </p>
+                                <p className="p-6 text-center text-muted-foreground text-sm">Nenhum evento agendado</p>
                             ) : (
                                 proximosEventos.map(e => (
-                                    <div
-                                        key={e.id}
-                                        className="px-5 py-3 border-b border-border/20 last:border-0 hover:bg-primary/5 transition-colors"
-                                    >
+                                    <div key={e.id} className="px-5 py-3 border-b border-border/20 last:border-0 hover:bg-primary/5 transition-colors">
                                         <p className="text-sm font-medium truncate">{e.titulo}</p>
                                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                                            {new Date(e.dataInicio).toLocaleDateString('pt-BR', {
-                                                day:    '2-digit',
-                                                month:  'short',
-                                                hour:   '2-digit',
-                                                minute: '2-digit',
-                                            })}
+                                            {new Date(e.dataInicio).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                             {e.clienteNome ? ` • ${e.clienteNome}` : ''}
                                         </p>
                                     </div>
@@ -192,16 +141,7 @@ export function SellerDashboardView({ orders, events, config }: SellerDashboardV
     );
 }
 
-// ── Sub-componente ────────────────────────────────────────────────────────────
-
-interface KpiCardProps {
-    title:     string;
-    value:     string;
-    sub:       string;
-    icon:      React.ElementType;
-    iconClass: string;
-}
-
+interface KpiCardProps { title: string; value: string; sub: string; icon: React.ElementType; iconClass: string; }
 function KpiCard({ title, value, sub, icon: Icon, iconClass }: KpiCardProps) {
     return (
         <Card className="border-glow bg-card">
