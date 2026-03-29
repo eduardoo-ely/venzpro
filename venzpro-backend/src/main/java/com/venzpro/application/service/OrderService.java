@@ -62,7 +62,6 @@ public class OrderService {
         var customer = buscarClientePorOrg(req.customerId(), organizationId);
         var user     = buscarUsuarioPorOrg(userId, organizationId);
 
-        // ── NOVO: Busca a empresa globalmente e valida o acordo ──
         var company  = buscarEmpresaComVinculo(req.companyId(), organizationId);
 
         validarCriacaoPedido(customer, user);
@@ -109,7 +108,6 @@ public class OrderService {
         var customer = buscarClientePorOrg(req.customerId(), organizationId);
         var user     = buscarUsuarioPorOrg(userId, organizationId);
 
-        // ── NOVO: Busca a empresa globalmente e valida o acordo ──
         var company  = buscarEmpresaComVinculo(req.companyId(), organizationId);
 
         validarCriacaoPedido(customer, user);
@@ -174,7 +172,6 @@ public class OrderService {
 
         var changedBy = buscarUsuarioPorOrg(userId, organizationId);
 
-        // Apenas ADMIN e GERENTE podem aprovar
         if (novoStatus == OrderStatus.APROVADO && role == UserRole.VENDEDOR) {
             throw new BusinessException("Apenas Gerentes ou Admins podem APROVAR um pedido.");
         }
@@ -222,7 +219,6 @@ public class OrderService {
             throw new BusinessException("Cliente não está aprovado. Status atual: " + customer.getStatus());
         }
 
-        // ADMIN e GERENTE podem criar pedidos para qualquer cliente aprovado
         if (user.getRole() != UserRole.ADMIN && user.getRole() != UserRole.GERENTE) {
             validarClienteParaVendedor(customer, user);
         }
@@ -280,18 +276,14 @@ public class OrderService {
     // INTEGRAÇÃO ECOSSISTEMA (Empresas e Produtos)
     // ─────────────────────────────────────────────────────────────
 
-    /**
-     * Resolve o Cenário A (Hub) e o Cenário B (Local).
-     * Procura a empresa globalmente e valida se a organização a pode usar.
-     */
     private Company buscarEmpresaComVinculo(UUID companyId, UUID organizationId) {
         if (companyId == null) return null;
 
         var company = companyRepository.findById(companyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa", companyId));
 
-        // Se a empresa não for da própria organização, exige um acordo ativo no ecossistema
-        if (!company.getOrganization().getId().equals(organizationId)) {
+        // FIX: Usando getOrganizationId() direto do BaseTenantEntity
+        if (!company.getOrganizationId().equals(organizationId)) {
             if (!agreementService.hasActiveAgreement(organizationId, companyId)) {
                 throw new BusinessException(
                         "A sua organização não tem um acordo ativo para vender produtos desta empresa.");
@@ -313,14 +305,15 @@ public class OrderService {
             if (req.quantidade() == null || req.quantidade().compareTo(java.math.BigDecimal.ZERO) <= 0)
                 throw new BusinessException("A quantidade dos itens deve ser maior que zero.");
 
-            // ── NOVO: Procura o produto de forma global e valida segurança depois ──
+            // FIX: Procura o produto de forma global e valida segurança
             var product = productRepository.findById(req.productId())
                     .orElseThrow(() -> new ResourceNotFoundException("Produto", req.productId()));
 
-            // Verifica se o produto pertence a outra organização sem acordo
-            if (!product.getOrganization().getId().equals(organizationId)) {
-                if (product.getCompany() == null || !agreementService.hasActiveAgreement(organizationId, product.getCompany().getId())) {
-                    throw new BusinessException("O produto '" + product.getNome() + "' não pertence à sua organização nem a um fornecedor parceiro.");
+            // FIX: Usando getOrganizationId() direto do BaseTenantEntity
+            if (!product.getOrganizationId().equals(organizationId)) {
+                // Se o produto não for da sua Org, ele TEM que pertencer à mesma Org da Empresa do pedido.
+                if (order.getCompany() == null || !product.getOrganizationId().equals(order.getCompany().getOrganizationId())) {
+                    throw new BusinessException("O produto '" + product.getNome() + "' não pertence ao fornecedor selecionado.");
                 }
             }
 
