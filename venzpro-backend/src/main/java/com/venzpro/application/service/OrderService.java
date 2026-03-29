@@ -308,12 +308,10 @@ public class OrderService {
             var product = productRepository.findById(req.productId())
                     .orElseThrow(() -> new ResourceNotFoundException("Produto", req.productId()));
 
-            // FIX DEFINITIVO: Pegando o ID pelo objeto de relacionamento Organization mapeado no Product
-            if (product.getOrganization() != null && !product.getOrganization().getId().equals(organizationId)) {
+            if (product.getOrganizationId() != null && !product.getOrganizationId().equals(organizationId)) {
                 if (order.getCompany() == null ||
-                        product.getOrganization() == null ||
                         order.getCompany().getOrganization() == null ||
-                        !product.getOrganization().getId().equals(order.getCompany().getOrganization().getId())) {
+                        !product.getOrganizationId().equals(order.getCompany().getOrganization().getId())) {
                     throw new BusinessException("O produto '" + product.getNome() + "' não pertence ao fornecedor selecionado.");
                 }
             }
