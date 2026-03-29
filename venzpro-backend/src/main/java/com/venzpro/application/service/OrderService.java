@@ -282,8 +282,8 @@ public class OrderService {
         var company = companyRepository.findById(companyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa", companyId));
 
-        // FIX: Usando getOrganizationId() direto do BaseTenantEntity
-        if (!company.getOrganizationId().equals(organizationId)) {
+        // FIX DEFINITIVO: Pegando o ID pelo objeto de relacionamento Organization mapeado na Company
+        if (company.getOrganization() != null && !company.getOrganization().getId().equals(organizationId)) {
             if (!agreementService.hasActiveAgreement(organizationId, companyId)) {
                 throw new BusinessException(
                         "A sua organização não tem um acordo ativo para vender produtos desta empresa.");
@@ -305,14 +305,15 @@ public class OrderService {
             if (req.quantidade() == null || req.quantidade().compareTo(java.math.BigDecimal.ZERO) <= 0)
                 throw new BusinessException("A quantidade dos itens deve ser maior que zero.");
 
-            // FIX: Procura o produto de forma global e valida segurança
             var product = productRepository.findById(req.productId())
                     .orElseThrow(() -> new ResourceNotFoundException("Produto", req.productId()));
 
-            // FIX: Usando getOrganizationId() direto do BaseTenantEntity
-            if (!product.getOrganizationId().equals(organizationId)) {
-                // Se o produto não for da sua Org, ele TEM que pertencer à mesma Org da Empresa do pedido.
-                if (order.getCompany() == null || !product.getOrganizationId().equals(order.getCompany().getOrganizationId())) {
+            // FIX DEFINITIVO: Pegando o ID pelo objeto de relacionamento Organization mapeado no Product
+            if (product.getOrganization() != null && !product.getOrganization().getId().equals(organizationId)) {
+                if (order.getCompany() == null ||
+                        product.getOrganization() == null ||
+                        order.getCompany().getOrganization() == null ||
+                        !product.getOrganization().getId().equals(order.getCompany().getOrganization().getId())) {
                     throw new BusinessException("O produto '" + product.getNome() + "' não pertence ao fornecedor selecionado.");
                 }
             }
